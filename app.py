@@ -287,6 +287,9 @@ async def analyze_asesor(
             raise HTTPException(status_code=429, detail="Cuota agotada. Verifica tu plan o usa otra API key.")
         raise HTTPException(status_code=500, detail=f"Error con {provider}: {str(e)}")
 
+    cache_key = f"report_{asesor_name.strip().upper()}"
+    current_data[cache_key] = informe
+
     return {
         "asesor": asesor_name,
         "informe": informe,
