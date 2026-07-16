@@ -28,7 +28,7 @@ def to_serializable(obj):
     return obj
 
 
-GEMINI_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"]
+GEMINI_MODELS = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-3.5-flash"]
 CLAUDE_MODELS = ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]
 OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
 
@@ -47,8 +47,7 @@ def _call_gemini(prompt: str, api_key: str) -> str:
             err_str = str(e).lower()
             if "429" in err_str or "quota" in err_str or "rate" in err_str:
                 continue
-            else:
-                raise e
+            raise e
     raise Exception(f"Todos los modelos Gemini fallaron. Ultimo error: {last_error}")
 
 
@@ -118,6 +117,7 @@ def _call_ai(prompt: str, api_key: str, provider: str = "gemini") -> str:
 
 
 def _verify_ai_key(api_key: str, provider: str = "gemini") -> dict:
+    models_tried = []
     try:
         if provider == "claude":
             import anthropic
@@ -142,6 +142,7 @@ def _verify_ai_key(api_key: str, provider: str = "gemini") -> dict:
             genai.configure(api_key=api_key)
             last_err = ""
             for model_name in GEMINI_MODELS:
+                models_tried.append(model_name)
                 try:
                     model = genai.GenerativeModel(model_name)
                     response = model.generate_content("Responde solo: OK")
@@ -153,7 +154,8 @@ def _verify_ai_key(api_key: str, provider: str = "gemini") -> dict:
     except Exception as e:
         err_str = str(e).lower()
         if "429" in err_str or "quota" in err_str or "rate" in err_str:
-            raise HTTPException(status_code=429, detail="Cuota agotada. Espera o usa otra API key.")
+            tried = ", ".join(models_tried) if models_tried else provider
+            raise HTTPException(status_code=429, detail=f"Cuota agotada. Modelos intentados: {tried}. Espera o usa otra API key.")
         if "invalid" in err_str or "unauthorized" in err_str or "401" in err_str:
             raise HTTPException(status_code=400, detail="API key invalida para " + provider)
         raise HTTPException(status_code=400, detail=f"Error verificando {provider}: {str(e)}")
