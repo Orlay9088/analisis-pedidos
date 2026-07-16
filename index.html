@@ -127,6 +127,22 @@
 
         .btn-clear:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
 
+        .btn-verify {
+            padding: 6px 14px;
+            background: var(--accent-dark);
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.8rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .btn-verify:hover { background: var(--accent); }
+        .btn-verify:disabled { opacity: 0.5; cursor: not-allowed; }
+
         .container {
             max-width: 1400px;
             margin: 0 auto;
@@ -735,6 +751,7 @@
             <div class="api-key-section">
                 <label>Gemini API Key:</label>
                 <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
+                <button class="btn-verify" id="verifyBtn" onclick="verifyApiKey()" title="Verificar conexion con Gemini">Verificar</button>
                 <span class="api-key-badge" id="apiKeyBadge" style="display:none;"></span>
             </div>
         </div>
@@ -914,7 +931,11 @@
 
                 await loadData();
             } catch (err) {
-                showToast('Error de conexion con el servidor. Verifica que este corriendo en http://127.0.0.1:8000', 'error');
+                if (API_BASE) {
+                    showToast('Error de conexion con el servidor de Render. Verifica que este activo en ' + API_BASE, 'error');
+                } else {
+                    showToast('Error de conexion. Verifica que el servidor este corriendo en http://127.0.0.1:8000', 'error');
+                }
                 console.error(err);
             } finally {
                 loadingBar.classList.remove('active');
@@ -1286,20 +1307,61 @@
             if (e.target === e.currentTarget) closeReport();
         });
 
-        function getApiKey() {
-            const input = document.getElementById('apiKey').value.trim();
+        async function verifyApiKey() {
+            const key = document.getElementById('apiKey').value.trim();
             const badge = document.getElementById('apiKeyBadge');
-            if (input) {
-                badge.style.display = 'inline-flex';
-                badge.className = 'api-key-badge ok';
-                badge.textContent = 'API Key configurada';
-                return input;
+            const btn = document.getElementById('verifyBtn');
+
+            if (!key) {
+                showToast('Ingresa una API key primero', 'error');
+                return;
             }
-            badge.style.display = 'none';
-            return '';
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
+            badge.style.display = 'inline-flex';
+            badge.className = 'api-key-badge';
+            badge.textContent = 'Verificando...';
+            badge.style.background = 'var(--blue-bg)';
+            badge.style.color = 'var(--blue)';
+
+            try {
+                const res = await fetch(`${API_BASE}/verify-key`, {
+                    method: 'POST',
+                    headers: { 'X-Api-Key': key },
+                });
+                const data = await res.json();
+
+                if (res.ok) {
+                    badge.className = 'api-key-badge ok';
+                    badge.textContent = data.message || 'Conexion exitosa';
+                    showToast('API key verificada correctamente con ' + (data.model || 'Gemini'), 'success');
+                } else {
+                    badge.className = 'api-key-badge error';
+                    badge.textContent = data.detail || 'Error';
+                    showToast(data.detail || 'Error verificando API key', 'error');
+                }
+            } catch (err) {
+                badge.className = 'api-key-badge error';
+                badge.textContent = 'Error de conexion';
+                if (API_BASE) {
+                    showToast('No se pudo conectar con el servidor de Render: ' + API_BASE, 'error');
+                } else {
+                    showToast('Error de conexion con el servidor local', 'error');
+                }
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Verificar';
+            }
         }
 
-        document.getElementById('apiKey').addEventListener('input', getApiKey);
+        function getApiKey() {
+            return document.getElementById('apiKey').value.trim();
+        }
+
+        document.getElementById('apiKey').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') verifyApiKey();
+        });
 
         function formatNum(n) {
             if (n === null || n === undefined) return '-';
