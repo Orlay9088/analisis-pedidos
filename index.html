@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analisis de Pedidos - Dashboard</title>
+    <style>
+        :root {
+            --bg-primary: #0f1117;
+            --bg-secondary: #1a1d27;
+            --bg-card: #222639;
+            --bg-hover: #2a2e45;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-dark: #4f46e5;
+            --green: #22c55e;
+            --green-bg: rgba(34,197,94,0.12);
+            --red: #ef4444;
+            --red-bg: rgba(239,68,68,0.12);
+            --yellow: #eab308;
+            --yellow-bg: rgba(234,179,8,0.12);
+            --blue: #3b82f6;
+            --blue-bg: rgba(59,130,246,0.12);
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --border: #334155;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --shadow: 0 4px 24px rgba(0,0,0,0.3);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--bg-secondary), var(--bg-card));
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-light), var(--accent));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .header-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .api-key-section {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .api-key-section input {
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            padding: 8px 14px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            width: 280px;
+            transition: border-color 0.2s;
+        }
+
+        .api-key-section input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .api-key-section label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            white-space: nowrap;
+        }
+
+        .api-key-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .api-key-badge.ok { background: var(--green-bg); color: var(--green); }
+        .api-key-badge.error { background: var(--red-bg); color: var(--red); }
+
+        .btn-clear {
+            padding: 6px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+        }
+
+        .btn-clear:hover { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 30px 40px;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 50px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: var(--bg-secondary);
+            position: relative;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: rgba(99,102,241,0.05);
+        }
+
+        .upload-zone .icon { font-size: 3rem; margin-bottom: 15px; opacity: 0.6; }
+        .upload-zone h3 { font-size: 1.1rem; margin-bottom: 8px; color: var(--text-primary); }
+        .upload-zone p { color: var(--text-muted); font-size: 0.9rem; }
+        .upload-zone input[type="file"] { display: none; }
+
+        .upload-zone .file-name {
+            margin-top: 15px;
+            padding: 8px 16px;
+            background: var(--accent-dark);
+            color: white;
+            border-radius: var(--radius-sm);
+            display: inline-block;
+            font-size: 0.85rem;
+        }
+
+        .loading-bar {
+            height: 3px;
+            background: var(--bg-card);
+            border-radius: 2px;
+            margin-top: 20px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .loading-bar.active { display: block; }
+        .loading-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            animation: loading 1.5s ease-in-out infinite;
+            width: 30%;
+        }
+
+        @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(400%); }
+        }
+
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin: 30px 0;
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .kpi-card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .kpi-card .label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .kpi-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+
+        .kpi-card .sub {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .kpi-card.green .value { color: var(--green); }
+        .kpi-card.red .value { color: var(--red); }
+        .kpi-card.yellow .value { color: var(--yellow); }
+        .kpi-card.blue .value { color: var(--blue); }
+        .kpi-card.accent .value { color: var(--accent-light); }
+
+        .section-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin: 30px 0 16px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title .badge {
+            font-size: 0.75rem;
+            background: var(--accent-dark);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .pivot-table-wrap {
+            overflow-x: auto;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        table th {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            padding: 12px 16px;
+            text-align: left;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.5px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        table td {
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(51,65,85,0.5);
+            color: var(--text-primary);
+        }
+
+        table tr:hover td {
+            background: var(--bg-hover);
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            margin: 20px 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 10px 14px 10px 38px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .search-box .search-icon {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            pointer-events: none;
+        }
+
+        .sort-select {
+            padding: 10px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .sort-select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .asesor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 16px;
+            margin: 20px 0;
+        }
+
+        .asesor-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .asesor-card:hover {
+            border-color: var(--accent);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(99,102,241,0.15);
+        }
+
+        .asesor-card .name {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--text-primary);
+        }
+
+        .asesor-card .metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .asesor-card .metric {
+            font-size: 0.8rem;
+        }
+
+        .asesor-card .metric .mlabel {
+            color: var(--text-muted);
+            font-size: 0.7rem;
+            text-transform: uppercase;
+        }
+
+        .asesor-card .metric .mval {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .asesor-card .backlog-bar {
+            margin-top: 12px;
+            height: 6px;
+            background: var(--bg-primary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .asesor-card .backlog-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s;
+        }
+
+        .asesor-card .analyze-btn {
+            margin-top: 14px;
+            width: 100%;
+            padding: 10px;
+            background: var(--accent-dark);
+            color: white;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: background 0.2s;
+        }
+
+        .asesor-card .analyze-btn:hover { background: var(--accent); }
+        .asesor-card .analyze-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .actions-bar {
+            display: flex;
+            gap: 12px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .btn-primary:hover { background: var(--accent-light); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover { background: var(--bg-hover); }
+
+        .btn-danger {
+            background: var(--red);
+            color: white;
+        }
+
+        .btn-danger:hover { background: #dc2626; }
+
+        .report-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.7);
+            z-index: 200;
+            backdrop-filter: blur(4px);
+            overflow-y: auto;
+            padding: 40px 20px;
+        }
+
+        .report-modal.active { display: flex; justify-content: center; align-items: flex-start; }
+
+        .report-content {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            max-width: 900px;
+            width: 100%;
+            padding: 30px;
+            position: relative;
+            margin: auto;
+        }
+
+        .report-content .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+
+        .report-content .close-btn:hover { background: var(--red); }
+
+        .report-content h2 {
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--accent-light);
+        }
+
+        .report-body {
+            font-size: 0.9rem;
+            line-height: 1.8;
+            color: var(--text-primary);
+            white-space: pre-wrap;
+        }
+
+        .report-body h3 {
+            font-size: 1.05rem;
+            color: var(--accent-light);
+            margin: 20px 0 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .report-body ul, .report-body ol {
+            padding-left: 24px;
+            margin: 8px 0;
+        }
+
+        .report-body li { margin: 4px 0; }
+
+        .report-body strong { color: var(--accent-light); }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state .icon { font-size: 3rem; margin-bottom: 15px; opacity: 0.4; }
+        .empty-state h3 { font-size: 1.1rem; margin-bottom: 8px; color: var(--text-secondary); }
+        .empty-state p { font-size: 0.9rem; }
+
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 14px 24px;
+            border-radius: var(--radius-sm);
+            font-size: 0.85rem;
+            font-weight: 500;
+            z-index: 300;
+            transform: translateY(100px);
+            opacity: 0;
+            transition: all 0.3s;
+        }
+
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast.success { background: var(--green); color: white; }
+        .toast.error { background: var(--red); color: white; }
+
+        .detected-cols {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 10px 0 20px;
+        }
+
+        .col-tag {
+            padding: 4px 12px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .col-tag .key {
+            color: var(--accent-light);
+            font-weight: 600;
+        }
+
+        .progress-ctr {
+            display: none;
+            text-align: center;
+            margin: 20px 0;
+        }
+
+        .progress-ctr.active { display: block; }
+
+        .progress-ctr .status {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-top: 10px;
+        }
+
+        .progress-ctr .progress-bar {
+            height: 6px;
+            background: var(--bg-card);
+            border-radius: 3px;
+            margin-top: 12px;
+            overflow: hidden;
+        }
+
+        .progress-ctr .progress-bar .fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 3px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        .download-section {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .download-section .btn {
+            flex: 1;
+            min-width: 120px;
+            justify-content: center;
+            font-size: 0.8rem;
+            padding: 8px 14px;
+        }
+
+        .btn-word {
+            background: #2b579a;
+            color: white;
+        }
+
+        .btn-word:hover { background: #3a6bb5; }
+
+        .btn-excel {
+            background: #217346;
+            color: white;
+        }
+
+        .btn-excel:hover { background: #2d9259; }
+
+        .report-download-bar {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0 10px;
+            padding: 16px;
+            background: var(--bg-card);
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .report-download-bar .dl-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            font-weight: 600;
+            margin-right: 8px;
+        }
+
+        .report-download-bar .btn {
+            padding: 8px 18px;
+            font-size: 0.8rem;
+        }
+
+        .asesor-card .card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .asesor-card .card-actions .btn {
+            flex: 1;
+            justify-content: center;
+            font-size: 0.75rem;
+            padding: 7px 10px;
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .header { padding: 15px 20px; flex-direction: column; gap: 12px; }
+            .container { padding: 20px; }
+            .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+            .asesor-grid { grid-template-columns: 1fr; }
+            .api-key-section input { width: 100%; }
+            .api-key-section { flex-direction: column; align-items: stretch; }
+            .toolbar { flex-direction: column; }
+            .search-box { min-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div>
+            <h1>Analisis de Pedidos</h1>
+            <div class="header-subtitle">Dashboard de gestion y analisis por asesor</div>
+        </div>
+        <div class="header-right">
+            <button class="btn-clear" id="clearBtn" style="display:none;" onclick="clearData()">Limpiar datos</button>
+            <div class="api-key-section">
+                <label>Gemini API Key:</label>
+                <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
+                <span class="api-key-badge" id="apiKeyBadge" style="display:none;"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <div class="upload-zone" id="uploadZone">
+            <div class="icon">&#128193;</div>
+            <h3>Cargar archivo Excel</h3>
+            <p>Arrastra el archivo aqui o haz clic para seleccionar</p>
+            <p style="margin-top:8px; font-size:0.8rem;">Soporta archivos .xlsx con datos de pedidos y tabla dinamica</p>
+            <input type="file" id="fileInput" accept=".xlsx,.xls">
+            <div id="fileName" style="display:none;"></div>
+        </div>
+        <div class="loading-bar" id="loadingBar"><div class="fill"></div></div>
+
+        <div id="dashboard" style="display:none;">
+
+            <div class="kpi-grid" id="kpiGrid"></div>
+
+            <div id="detectedSection" style="display:none;">
+                <div class="section-title">Columnas detectadas</div>
+                <div class="detected-cols" id="detectedCols"></div>
+            </div>
+
+            <div id="pivotSection" style="display:none;">
+                <div class="section-title">
+                    Tabla Dinamica
+                    <span class="badge" id="pivotBadge"></span>
+                </div>
+                <div class="pivot-table-wrap" id="pivotWrap"></div>
+            </div>
+
+            <div class="actions-bar" id="actionsBar" style="display:none;">
+                <button class="btn btn-primary" id="analyzeAllBtn" onclick="analyzeAll()">
+                    Generar informes para todos
+                </button>
+            </div>
+
+            <div id="progressSection" class="progress-ctr">
+                <div class="status" id="progressStatus">Generando informes...</div>
+                <div class="progress-bar"><div class="fill" id="progressFill"></div></div>
+            </div>
+
+            <div class="section-title">
+                Asesores
+                <span class="badge" id="asesorCount"></span>
+            </div>
+
+            <div class="toolbar">
+                <div class="search-box">
+                    <span class="search-icon">&#128269;</span>
+                    <input type="text" id="searchInput" placeholder="Buscar asesor por nombre..." oninput="filterAsesores()">
+                </div>
+                <select class="sort-select" id="sortSelect" onchange="filterAsesores()">
+                    <option value="name-asc">Nombre A-Z</option>
+                    <option value="name-desc">Nombre Z-A</option>
+                    <option value="pedida-desc">Pedida (mayor)</option>
+                    <option value="pedida-asc">Pedida (menor)</option>
+                    <option value="pendiente-desc">Pendiente (mayor)</option>
+                    <option value="backlog-desc">Backlog (mayor)</option>
+                    <option value="valor-desc">Valor (mayor)</option>
+                    <option value="margen-desc">Margen (mayor)</option>
+                    <option value="docs-desc">Documentos (mayor)</option>
+                </select>
+            </div>
+
+            <div class="asesor-grid" id="asesorGrid"></div>
+            <div class="no-results" id="noResults" style="display:none;">No se encontraron asesores</div>
+
+        </div>
+
+        <div class="empty-state" id="emptyState">
+            <div class="icon">&#128202;</div>
+            <h3>Sin datos cargados</h3>
+            <p>Sube un archivo Excel para comenzar el analisis</p>
+        </div>
+
+    </div>
+
+    <div class="report-modal" id="reportModal">
+        <div class="report-content">
+            <button class="close-btn" onclick="closeReport()">&times;</button>
+            <h2 id="reportTitle"></h2>
+            <div class="report-download-bar" id="reportDownloadBar" style="display:none;">
+                <span class="dl-label">Descargar informe:</span>
+                <button class="btn btn-word" id="dlWordBtn" onclick="downloadCurrentReport('word')">
+                    Descargar Word (.docx)
+                </button>
+                <button class="btn btn-excel" id="dlExcelBtn" onclick="downloadCurrentReport('excel')">
+                    Descargar Excel (.xlsx)
+                </button>
+            </div>
+            <div class="report-body" id="reportBody"></div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const API_BASE = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
+            ? ''
+            : 'https://analisis-pedidos.onrender.com';
+        let appData = null;
+        let currentReportAsesor = '';
+        let toastTimer = null;
+
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const loadingBar = document.getElementById('loadingBar');
+
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) uploadFile(file);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) uploadFile(file);
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeReport();
+        });
+
+        async function uploadFile(file) {
+            if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.xls')) {
+                showToast('Solo se permiten archivos Excel (.xlsx)', 'error');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            loadingBar.classList.add('active');
+            uploadZone.style.opacity = '0.5';
+
+            try {
+                const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+
+                if (!res.ok) {
+                    let msg = 'Error al cargar el archivo';
+                    try {
+                        const errData = await res.json();
+                        msg = errData.detail || msg;
+                    } catch (e) {
+                        msg = `Error del servidor (${res.status}). Verifica que el servidor este corriendo.`;
+                    }
+                    showToast(msg, 'error');
+                    return;
+                }
+
+                const data = await res.json();
+
+                document.getElementById('fileName').style.display = 'inline-block';
+                document.getElementById('fileName').className = 'file-name';
+                document.getElementById('fileName').textContent = data.filename + (data.canal_filter ? ' (' + data.canal_filter + ')' : '');
+
+                document.getElementById('clearBtn').style.display = 'inline-flex';
+
+                const filterMsg = data.total_unfiltered_rows > data.total_rows ? ` (de ${data.total_unfiltered_rows} totales)` : '';
+                showToast(`Archivo cargado: ${data.total_rows} registros, ${data.asesores} asesores${filterMsg}`, 'success');
+
+                await loadData();
+            } catch (err) {
+                showToast('Error de conexion con el servidor. Verifica que este corriendo en http://127.0.0.1:8000', 'error');
+                console.error(err);
+            } finally {
+                loadingBar.classList.remove('active');
+                uploadZone.style.opacity = '1';
+            }
+        }
+
+        async function loadData() {
+            try {
+                const res = await fetch(`${API_BASE}/data`);
+                if (!res.ok) {
+                    let msg = 'Error cargando datos del servidor';
+                    try {
+                        const errData = await res.json();
+                        msg = errData.detail || msg;
+                    } catch (e) {}
+                    showToast(msg, 'error');
+                    return;
+                }
+                appData = await res.json();
+                renderDashboard();
+            } catch (err) {
+                showToast('Error de conexion al cargar datos', 'error');
+                console.error(err);
+            }
+        }
+
+        function renderDashboard() {
+            document.getElementById('emptyState').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('actionsBar').style.display = 'flex';
+
+            renderKPIs();
+            renderDetectedColumns();
+            renderPivotTable();
+            filterAsesores();
+        }
+
+        function renderKPIs() {
+            const ts = appData.team_summary;
+            const grid = document.getElementById('kpiGrid');
+            grid.innerHTML = `
+                <div class="kpi-card accent">
+                    <div class="label">Total Pedida</div>
+                    <div class="value">${formatNum(ts.total_pedida)}</div>
+                    <div class="sub">${ts.total_asesores} asesores</div>
+                </div>
+                <div class="kpi-card yellow">
+                    <div class="label">Total Pendiente</div>
+                    <div class="value">${formatNum(ts.total_pendiente)}</div>
+                    <div class="sub">Sin entregar</div>
+                </div>
+                <div class="kpi-card blue">
+                    <div class="label">Total Comprometido</div>
+                    <div class="value">${formatNum(ts.total_comprometida)}</div>
+                    <div class="sub">Compromiso activo</div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="label">Backlog General</div>
+                    <div class="value">${ts.backlog_general_pct}%</div>
+                    <div class="sub">${formatNum(ts.total_pendiente)} / ${formatNum(ts.total_pedida)}</div>
+                </div>
+                <div class="kpi-card green">
+                    <div class="label">Valor Total</div>
+                    <div class="value">${formatCurrency(ts.total_valor)}</div>
+                    <div class="sub">${ts.total_documentos_unicos} docs</div>
+                </div>
+                <div class="kpi-card accent">
+                    <div class="label">Margen Promedio</div>
+                    <div class="value">${ts.margen_promedio_equipo}%</div>
+                    <div class="sub">Equipo completo</div>
+                </div>
+            `;
+        }
+
+        function renderDetectedColumns() {
+            const cols = appData.detected_columns;
+            if (!cols || Object.keys(cols).length === 0) return;
+
+            document.getElementById('detectedSection').style.display = 'block';
+            const container = document.getElementById('detectedCols');
+            const labels = {
+                asesor: 'Asesor', canal_dist: 'Canal Dist.', estado_mov: 'Estado',
+                fecha: 'Fecha', cant_pedida: 'Cant. Pedida', cant_pendiente: 'Cant. Pendiente',
+                cant_comprometida: 'Cant. Comprometida', linea: 'Linea', sub_linea: 'Sub-Linea',
+                cliente: 'Cliente', documento: 'Documento', referencia: 'Referencia',
+                desc_item: 'Desc. Item', bodega: 'Bodega', co: 'C.O.',
+                v_unidad: 'V. Unidad', utilidad: 'Utilidad', margen: 'Margen',
+                desc_co: 'Desc. C.O.', valor_descuentos: 'Descuentos',
+            };
+
+            container.innerHTML = Object.entries(cols)
+                .filter(([k, v]) => v !== null)
+                .map(([k, v]) => `<span class="col-tag"><span class="key">${labels[k] || k}</span>: ${v}</span>`)
+                .join('');
+        }
+
+        function renderPivotTable() {
+            const pivot = appData.pivot_table;
+            if (!pivot || !pivot.data || pivot.data.length === 0) return;
+
+            document.getElementById('pivotSection').style.display = 'block';
+            if (pivot.filter_value) {
+                document.getElementById('pivotBadge').textContent = pivot.filter_value;
+            }
+
+            const wrap = document.getElementById('pivotWrap');
+            if (!pivot.headers) return;
+
+            let html = '<table><thead><tr>';
+            pivot.headers.forEach(h => {
+                if (h) html += `<th>${h}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            pivot.data.forEach(row => {
+                html += '<tr>';
+                row.forEach((cell, i) => {
+                    if (cell === null || cell === undefined) return;
+                    if (typeof cell === 'number') {
+                        html += `<td style="text-align:right; font-variant-numeric:tabular-nums;">${formatNum(cell)}</td>`;
+                    } else {
+                        const isTotal = String(cell).toLowerCase().includes('total');
+                        html += `<td style="${isTotal ? 'font-weight:700; color:var(--accent-light);' : ''}">${cell}</td>`;
+                    }
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            wrap.innerHTML = html;
+        }
+
+        function filterAsesores() {
+            if (!appData) return;
+
+            const query = (document.getElementById('searchInput').value || '').toLowerCase().trim();
+            const sortVal = document.getElementById('sortSelect').value;
+
+            let metrics = [...appData.asesor_metrics];
+
+            if (query) {
+                metrics = metrics.filter(m => m.asesor.toLowerCase().includes(query));
+            }
+
+            const [sortKey, sortDir] = sortVal.split('-');
+            metrics.sort((a, b) => {
+                let va, vb;
+                switch (sortKey) {
+                    case 'name': va = a.asesor; vb = b.asesor; return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+                    case 'pedida': va = a.cant_pedida; vb = b.cant_pedida; break;
+                    case 'pendiente': va = a.cant_pendiente; vb = b.cant_pendiente; break;
+                    case 'backlog': va = a.backlog_pct; vb = b.backlog_pct; break;
+                    case 'valor': va = a.valor_total || 0; vb = b.valor_total || 0; break;
+                    case 'margen': va = a.margen_promedio || 0; vb = b.margen_promedio || 0; break;
+                    case 'docs': va = a.documentos_unicos; vb = b.documentos_unicos; break;
+                    default: return 0;
+                }
+                return sortDir === 'desc' ? vb - va : va - vb;
+            });
+
+            renderAsesores(metrics);
+        }
+
+        function renderAsesores(metrics) {
+            const grid = document.getElementById('asesorGrid');
+            const noResults = document.getElementById('noResults');
+            document.getElementById('asesorCount').textContent = metrics.length;
+
+            if (metrics.length === 0) {
+                grid.innerHTML = '';
+                noResults.style.display = 'block';
+                return;
+            }
+
+            noResults.style.display = 'none';
+
+            grid.innerHTML = metrics.map(m => {
+                const backlogColor = m.backlog_pct > 70 ? 'var(--red)' : m.backlog_pct > 40 ? 'var(--yellow)' : 'var(--green)';
+                const pedidosRetenidos = m.pedidos_por_estado?.Retenido?.registros || 0;
+                const aprobadosPedida = m.pedidos_por_estado?.Aprobado?.cant_pedida || 0;
+                const retenidosPedida = m.pedidos_por_estado?.Retenido?.cant_pedida || 0;
+                return `
+                    <div class="asesor-card" onclick="analyzeAsesor('${escHtml(m.asesor)}')">
+                        <div class="name">${escHtml(m.asesor)}</div>
+                        <div class="metrics">
+                            <div class="metric">
+                                <div class="mlabel">Pedida</div>
+                                <div class="mval" style="color:var(--accent-light);">${formatNum(m.cant_pedida)}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="mlabel">Pendiente</div>
+                                <div class="mval" style="color:var(--yellow);">${formatNum(m.cant_pendiente)}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="mlabel">Aprobado</div>
+                                <div class="mval" style="color:var(--green);">${formatNum(aprobadosPedida)}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="mlabel">Retenido</div>
+                                <div class="mval" style="color:var(--red);">${formatNum(retenidosPedida)}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px;">
+                            <span style="font-size:0.8rem; color:var(--text-muted);">Backlog ${m.backlog_pct}%</span>
+                            <span style="font-size:0.75rem; color:var(--text-muted);">${m.documentos_unicos} docs</span>
+                        </div>
+                        <div class="backlog-bar">
+                            <div class="fill" style="width:${Math.min(m.backlog_pct, 100)}%; background:${backlogColor};"></div>
+                        </div>
+                        ${m.desglose_contrato && Object.keys(m.desglose_contrato).length > 0 ? `
+                        <div style="margin-top:10px; padding:8px; background:rgba(99,102,241,0.08); border-radius:6px;">
+                            <div style="font-size:0.7rem; color:var(--text-muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:0.5px;">Tipo Contrato</div>
+                            <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                                ${Object.entries(m.desglose_contrato).map(([tipo, d]) => `
+                                    <span style="font-size:0.8rem;">
+                                        <span style="color:${tipo === 'Instalacion' ? 'var(--accent-light)' : 'var(--green)'};">${tipo}</span>:
+                                        <span style="color:var(--text-primary);">${formatNum(d.pedida)}</span>
+                                    </span>
+                                `).join('')}
+                            </div>
+                        </div>` : ''}
+                        ${m.top_proyectos && m.top_proyectos.length > 0 ? `
+                        <div style="margin-top:8px;">
+                            <details>
+                                <summary style="font-size:0.7rem; color:var(--text-muted); cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">${m.top_proyectos.length} Proyectos</summary>
+                                <div style="margin-top:4px;">
+                                    ${m.top_proyectos.map(p => `
+                                        <div style="font-size:0.75rem; color:var(--text-secondary); padding:2px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:70%;">${escHtml(p.proyecto)}</span>
+                                            <span style="color:var(--accent-light); white-space:nowrap;">${formatNum(p.cant_pedida)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </details>
+                        </div>` : ''}
+                        ${m.top_items && m.top_items.length > 0 ? `
+                        <div style="margin-top:4px;">
+                            <details>
+                                <summary style="font-size:0.7rem; color:var(--text-muted); cursor:pointer; text-transform:uppercase; letter-spacing:0.5px;">${m.top_items.length} Items</summary>
+                                <div style="margin-top:4px;">
+                                    ${m.top_items.map(it => `
+                                        <div style="font-size:0.75rem; color:var(--text-secondary); padding:2px 0; border-bottom:1px solid var(--border); display:flex; justify-content:space-between;">
+                                            <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:55%;">${escHtml(it.item)}</span>
+                                            <span style="color:var(--green); white-space:nowrap;">P:${formatNum(it.cant_pedida)}</span>
+                                            <span style="color:var(--yellow); white-space:nowrap;">C:${formatNum(it.cant_comprometida)}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </details>
+                        </div>` : ''}
+                        <button class="analyze-btn" onclick="event.stopPropagation(); analyzeAsesor('${escHtml(m.asesor)}')">
+                            Generar informe
+                        </button>
+                        <div class="card-actions" onclick="event.stopPropagation();">
+                            <button class="btn btn-word" onclick="downloadReport('${escHtml(m.asesor)}', 'word')" title="Descargar Word">
+                                Word
+                            </button>
+                            <button class="btn btn-excel" onclick="downloadReport('${escHtml(m.asesor)}', 'excel')" title="Descargar Excel">
+                                Excel
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async function analyzeAsesor(name) {
+            const key = getApiKey();
+            if (!key) {
+                showToast('Ingresa tu API key de Gemini', 'error');
+                return;
+            }
+
+            currentReportAsesor = name;
+            const modal = document.getElementById('reportModal');
+            document.getElementById('reportTitle').textContent = `Informe: ${name}`;
+            document.getElementById('reportDownloadBar').style.display = 'none';
+            document.getElementById('reportBody').innerHTML = '<div style="text-align:center; padding:40px;"><div class="spinner"></div><div style="margin-top:15px; color:var(--text-secondary);">Generando informe con Gemini AI...</div></div>';
+            modal.classList.add('active');
+
+            try {
+                const canal = appData.canal_filter || '';
+                const res = await fetch(`${API_BASE}/analyze/${encodeURIComponent(name)}?canal=${encodeURIComponent(canal)}`, {
+                    method: 'POST',
+                    headers: {
+                        'X-Api-Key': key,
+                    },
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    document.getElementById('reportBody').innerHTML = `<div style="color:var(--red); padding:20px;">${escHtml(data.detail || 'Error generando informe')}</div>`;
+                    return;
+                }
+
+                document.getElementById('reportBody').innerHTML = renderMarkdown(data.informe);
+                document.getElementById('reportDownloadBar').style.display = 'flex';
+            } catch (err) {
+                document.getElementById('reportBody').innerHTML = `<div style="color:var(--red); padding:20px;">Error de conexion: ${escHtml(err.message)}</div>`;
+            }
+        }
+
+        async function analyzeAll() {
+            const key = getApiKey();
+            if (!key) {
+                showToast('Ingresa tu API key de Gemini', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('analyzeAllBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span> Generando informes...';
+
+            const progressSection = document.getElementById('progressSection');
+            const progressStatus = document.getElementById('progressStatus');
+            const progressFill = document.getElementById('progressFill');
+            progressSection.classList.add('active');
+            progressFill.style.width = '0%';
+
+            const total = appData.asesor_metrics.length;
+            progressStatus.textContent = `Generando informe 1 de ${total}...`;
+
+            const canal = appData.canal_filter || '';
+
+            try {
+                const res = await fetch(`${API_BASE}/analyze-all?canal=${encodeURIComponent(canal)}`, {
+                    method: 'POST',
+                    headers: { 'X-Api-Key': key },
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showToast(data.detail || 'Error generando informes', 'error');
+                    return;
+                }
+
+                progressFill.style.width = '100%';
+                progressStatus.textContent = `${data.informes.length} informes generados correctamente`;
+
+                const modal = document.getElementById('reportModal');
+                let allReports = '';
+                data.informes.forEach((inf, i) => {
+                    allReports += `<h3>${escHtml(inf.asesor)}</h3>`;
+                    allReports += `<div class="report-single">${renderMarkdown(inf.informe)}</div>`;
+                    if (i < data.informes.length - 1) {
+                        allReports += '<hr style="border:none; border-top:1px solid var(--border); margin:30px 0;">';
+                    }
+                });
+
+                document.getElementById('reportTitle').textContent = `Informes de Todos los Asesores (${data.informes.length})`;
+                document.getElementById('reportBody').innerHTML = allReports;
+                modal.classList.add('active');
+            } catch (err) {
+                showToast('Error de conexion', 'error');
+                progressStatus.textContent = 'Error al generar informes';
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Generar informes para todos';
+                setTimeout(() => { progressSection.classList.remove('active'); }, 3000);
+            }
+        }
+
+        function closeReport() {
+            document.getElementById('reportModal').classList.remove('active');
+        }
+
+        document.getElementById('reportModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeReport();
+        });
+
+        function getApiKey() {
+            const input = document.getElementById('apiKey').value.trim();
+            const badge = document.getElementById('apiKeyBadge');
+            if (input) {
+                badge.style.display = 'inline-flex';
+                badge.className = 'api-key-badge ok';
+                badge.textContent = 'API Key configurada';
+                return input;
+            }
+            badge.style.display = 'none';
+            return '';
+        }
+
+        document.getElementById('apiKey').addEventListener('input', getApiKey);
+
+        function formatNum(n) {
+            if (n === null || n === undefined) return '-';
+            return Number(n).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+        }
+
+        function formatCurrency(n) {
+            if (n === null || n === undefined) return '-';
+            return '$' + Number(n).toLocaleString('es-CO', { maximumFractionDigits: 0 });
+        }
+
+        function escHtml(s) {
+            if (!s) return '';
+            return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        }
+
+        function renderMarkdown(text) {
+            if (!text) return '';
+            let html = escHtml(text);
+            html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>');
+            html = html.replace(/^## (.+)$/gm, '<h3 style="font-size:1.15rem;">$1</h3>');
+            html = html.replace(/^# (.+)$/gm, '<h3 style="font-size:1.25rem;">$1</h3>');
+            html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+            html = html.replace(/^- (.+)$/gm, '<li>$1</li>');
+            html = html.replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>');
+            html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+            html = html.replace(/<\/ul>\s*<ul>/g, '');
+            html = html.replace(/\n{2,}/g, '<br><br>');
+            html = html.replace(/\n/g, '<br>');
+            return html;
+        }
+
+        function showToast(msg, type) {
+            if (toastTimer) clearTimeout(toastTimer);
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast ${type} show`;
+            toastTimer = setTimeout(() => { toast.className = 'toast'; }, 4000);
+        }
+
+        function clearData() {
+            appData = null;
+            currentReportAsesor = '';
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('emptyState').style.display = 'block';
+            document.getElementById('clearBtn').style.display = 'none';
+            document.getElementById('fileName').style.display = 'none';
+            document.getElementById('searchInput').value = '';
+            fileInput.value = '';
+            showToast('Datos limpiados', 'success');
+        }
+
+        async function downloadReport(asesorName, format) {
+            if (!appData) {
+                showToast('Primero carga un archivo Excel', 'error');
+                return;
+            }
+
+            currentReportAsesor = asesorName;
+            const canal = appData.canal_filter || '';
+
+            showToast(`Descargando informe de ${asesorName} en ${format.toUpperCase()}...`, 'success');
+
+            try {
+                const res = await fetch(`${API_BASE}/download/${encodeURIComponent(asesorName)}/${format}?canal=${encodeURIComponent(canal)}`);
+                if (!res.ok) {
+                    let msg = 'Error al descargar';
+                    try {
+                        const data = await res.json();
+                        msg = data.detail || msg;
+                    } catch (e) {}
+                    showToast(msg, 'error');
+                    return;
+                }
+
+                const blob = await res.blob();
+                const ext = format === 'word' ? 'docx' : 'xlsx';
+                const safeName = asesorName.replace(/\s+/g, '_').replace(/\./g, '').replace(/\//g, '_');
+                const filename = `Informe_${safeName}.${ext}`;
+
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+
+                showToast(`Archivo descargado: ${filename}`, 'success');
+            } catch (err) {
+                showToast('Error de conexion al descargar', 'error');
+                console.error(err);
+            }
+        }
+
+        async function downloadCurrentReport(format) {
+            if (currentReportAsesor) {
+                await downloadReport(currentReportAsesor, format);
+            }
+        }
+    </script>
+
+</body>
+</html>
