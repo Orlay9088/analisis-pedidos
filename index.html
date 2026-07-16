@@ -109,10 +109,16 @@
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 600;
+            animation: badgePop 0.3s ease;
         }
 
-        .api-key-badge.ok { background: var(--green-bg); color: var(--green); }
-        .api-key-badge.error { background: var(--red-bg); color: var(--red); }
+        @keyframes badgePop {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .api-key-badge.ok { background: var(--green-bg); color: var(--green); border: 1px solid var(--green); }
+        .api-key-badge.error { background: var(--red-bg); color: var(--red); border: 1px solid var(--red); }
 
         .btn-clear {
             padding: 6px 14px;
@@ -749,9 +755,13 @@
         <div class="header-right">
             <button class="btn-clear" id="clearBtn" style="display:none;" onclick="clearData()">Limpiar datos</button>
             <div class="api-key-section">
-                <label>Gemini API Key:</label>
-                <input type="password" id="apiKey" placeholder="AIza..." autocomplete="off">
-                <button class="btn-verify" id="verifyBtn" onclick="verifyApiKey()" title="Verificar conexion con Gemini">Verificar</button>
+                <select id="aiProvider" class="sort-select" style="width:auto; font-size:0.8rem;" onchange="onProviderChange()">
+                    <option value="gemini">Gemini</option>
+                    <option value="claude">Claude</option>
+                    <option value="openai">ChatGPT</option>
+                </select>
+                <input type="password" id="apiKey" placeholder="Tu API key..." autocomplete="off">
+                <button class="btn-verify" id="verifyBtn" onclick="verifyApiKey()" title="Verificar conexion">Verificar</button>
                 <span class="api-key-badge" id="apiKeyBadge" style="display:none;"></span>
             </div>
         </div>
@@ -1206,7 +1216,7 @@
         async function analyzeAsesor(name) {
             const key = getApiKey();
             if (!key) {
-                showToast('Ingresa tu API key de Gemini', 'error');
+                showToast('Ingresa tu API key', 'error');
                 return;
             }
 
@@ -1214,15 +1224,17 @@
             const modal = document.getElementById('reportModal');
             document.getElementById('reportTitle').textContent = `Informe: ${name}`;
             document.getElementById('reportDownloadBar').style.display = 'none';
-            document.getElementById('reportBody').innerHTML = '<div style="text-align:center; padding:40px;"><div class="spinner"></div><div style="margin-top:15px; color:var(--text-secondary);">Generando informe con Gemini AI...</div></div>';
+            document.getElementById('reportBody').innerHTML = '<div style="text-align:center; padding:40px;"><div class="spinner"></div><div style="margin-top:15px; color:var(--text-secondary);">Generando informe...</div></div>';
             modal.classList.add('active');
 
             try {
+                const provider = document.getElementById('aiProvider').value;
                 const canal = appData.canal_filter || '';
                 const res = await fetch(`${API_BASE}/analyze/${encodeURIComponent(name)}?canal=${encodeURIComponent(canal)}`, {
                     method: 'POST',
                     headers: {
                         'X-Api-Key': key,
+                        'X-Provider': provider,
                     },
                 });
                 const data = await res.json();
@@ -1242,7 +1254,7 @@
         async function analyzeAll() {
             const key = getApiKey();
             if (!key) {
-                showToast('Ingresa tu API key de Gemini', 'error');
+                showToast('Ingresa tu API key', 'error');
                 return;
             }
 
@@ -1262,9 +1274,10 @@
             const canal = appData.canal_filter || '';
 
             try {
+                const provider = document.getElementById('aiProvider').value;
                 const res = await fetch(`${API_BASE}/analyze-all?canal=${encodeURIComponent(canal)}`, {
                     method: 'POST',
-                    headers: { 'X-Api-Key': key },
+                    headers: { 'X-Api-Key': key, 'X-Provider': provider },
                 });
                 const data = await res.json();
 
@@ -1321,24 +1334,26 @@
             btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;"></span>';
             badge.style.display = 'inline-flex';
             badge.className = 'api-key-badge';
-            badge.textContent = 'Verificando...';
+            badge.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span> Verificando...';
             badge.style.background = 'var(--blue-bg)';
             badge.style.color = 'var(--blue)';
+            badge.style.border = '1px solid var(--blue)';
 
             try {
+                const provider = document.getElementById('aiProvider').value;
                 const res = await fetch(`${API_BASE}/verify-key`, {
                     method: 'POST',
-                    headers: { 'X-Api-Key': key },
+                    headers: { 'X-Api-Key': key, 'X-Provider': provider },
                 });
                 const data = await res.json();
 
                 if (res.ok) {
                     badge.className = 'api-key-badge ok';
-                    badge.textContent = data.message || 'Conexion exitosa';
-                    showToast('API key verificada correctamente con ' + (data.model || 'Gemini'), 'success');
+                    badge.innerHTML = '&#10003; ' + (data.model || 'Conectado');
+                    showToast('Conectado con ' + (data.model || provider), 'success');
                 } else {
                     badge.className = 'api-key-badge error';
-                    badge.textContent = data.detail || 'Error';
+                    badge.innerHTML = '&#10007; ' + (data.detail || 'Error');
                     showToast(data.detail || 'Error verificando API key', 'error');
                 }
             } catch (err) {
@@ -1359,8 +1374,28 @@
             return document.getElementById('apiKey').value.trim();
         }
 
+        function onProviderChange() {
+            const provider = document.getElementById('aiProvider').value;
+            const input = document.getElementById('apiKey');
+            const placeholders = {
+                gemini: 'AIzaSy...',
+                claude: 'sk-ant-...',
+                openai: 'sk-...',
+            };
+            input.placeholder = placeholders[provider] || 'Tu API key...';
+            document.getElementById('apiKeyBadge').style.display = 'none';
+        }
+
         document.getElementById('apiKey').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') verifyApiKey();
+        });
+
+        document.getElementById('apiKey').addEventListener('input', () => {
+            const badge = document.getElementById('apiKeyBadge');
+            badge.style.display = 'none';
+            badge.className = 'api-key-badge';
+            badge.innerHTML = '';
+            badge.style = '';
         });
 
         function formatNum(n) {
