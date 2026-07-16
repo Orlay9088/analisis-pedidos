@@ -28,25 +28,48 @@ def to_serializable(obj):
     return obj
 
 
-GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+GEMINI_MODELS = ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-2.5-pro"]
+CLAUDE_MODELS = ["claude-sonnet-4-20250514", "claude-3-5-haiku-20241022"]
+OPENAI_MODELS = ["gpt-4o", "gpt-4o-mini"]
 
 
 def _call_gemini(prompt: str, api_key: str) -> str:
-    import time
     import google.generativeai as genai
     genai.configure(api_key=api_key)
-
     last_error = None
     for model_name in GEMINI_MODELS:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            last_error = e
+            err_str = str(e).lower()
+            if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                continue
+            else:
+                raise e
+    raise Exception(f"Todos los modelos Gemini fallaron. Ultimo error: {last_error}")
+
+
+def _call_claude(prompt: str, api_key: str) -> str:
+    import time
+    import anthropic
+    client = anthropic.Anthropic(api_key=api_key)
+    last_error = None
+    for model_name in CLAUDE_MODELS:
         for attempt in range(3):
             try:
-                model = genai.GenerativeModel(model_name)
-                response = model.generate_content(prompt)
-                return response.text
+                response = client.messages.create(
+                    model=model_name,
+                    max_tokens=8192,
+                    messages=[{"role": "user", "content": prompt}],
+                )
+                return response.content[0].text
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                if "429" in err_str or "rate" in err_str or "overloaded" in err_str:
                     if attempt < 2:
                         time.sleep(5 * (attempt + 1))
                         continue
@@ -54,7 +77,86 @@ def _call_gemini(prompt: str, api_key: str) -> str:
                         break
                 else:
                     raise e
-    raise Exception(f"Todos los modelos Gemini fallaron. Ultimo error: {last_error}")
+    raise Exception(f"Todos los modelos Claude fallaron. Ultimo error: {last_error}")
+
+
+def _call_openai(prompt: str, api_key: str) -> str:
+    import time
+    from openai import OpenAI
+    client = OpenAI(api_key=api_key)
+    last_error = None
+    for model_name in OPENAI_MODELS:
+        for attempt in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=8192,
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                if "429" in err_str or "rate" in err_str or "quota" in err_str:
+                    if attempt < 2:
+                        time.sleep(5 * (attempt + 1))
+                        continue
+                    else:
+                        break
+                else:
+                    raise e
+    raise Exception(f"Todos los modelos OpenAI fallaron. Ultimo error: {last_error}")
+
+
+def _call_ai(prompt: str, api_key: str, provider: str = "gemini") -> str:
+    if provider == "claude":
+        return _call_claude(prompt, api_key)
+    elif provider == "openai":
+        return _call_openai(prompt, api_key)
+    else:
+        return _call_gemini(prompt, api_key)
+
+
+def _verify_ai_key(api_key: str, provider: str = "gemini") -> dict:
+    try:
+        if provider == "claude":
+            import anthropic
+            client = anthropic.Anthropic(api_key=api_key)
+            response = client.messages.create(
+                model=CLAUDE_MODELS[0],
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Responde solo: OK"}],
+            )
+            return {"success": True, "model": CLAUDE_MODELS[0], "message": "Conexion exitosa con " + CLAUDE_MODELS[0]}
+        elif provider == "openai":
+            from openai import OpenAI
+            client = OpenAI(api_key=api_key)
+            response = client.chat.completions.create(
+                model=OPENAI_MODELS[0],
+                messages=[{"role": "user", "content": "Responde solo: OK"}],
+                max_tokens=10,
+            )
+            return {"success": True, "model": OPENAI_MODELS[0], "message": "Conexion exitosa con " + OPENAI_MODELS[0]}
+        else:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            last_err = ""
+            for model_name in GEMINI_MODELS:
+                try:
+                    model = genai.GenerativeModel(model_name)
+                    response = model.generate_content("Responde solo: OK")
+                    return {"success": True, "model": model_name, "message": "Conexion exitosa con " + model_name}
+                except Exception as e:
+                    last_err = str(e)
+                    continue
+            raise Exception(last_err or "Todos los modelos fallaron")
+    except Exception as e:
+        err_str = str(e).lower()
+        if "429" in err_str or "quota" in err_str or "rate" in err_str:
+            raise HTTPException(status_code=429, detail="Cuota agotada. Espera o usa otra API key.")
+        if "invalid" in err_str or "unauthorized" in err_str or "401" in err_str:
+            raise HTTPException(status_code=400, detail="API key invalida para " + provider)
+        raise HTTPException(status_code=400, detail=f"Error verificando {provider}: {str(e)}")
 
 load_dotenv()
 
@@ -82,28 +184,15 @@ async def serve_index():
 
 
 @app.post("/verify-key")
-async def verify_key(x_api_key: Optional[str] = Header(None)):
-    gemini_key = x_api_key or ""
-    if not gemini_key:
+async def verify_key(
+    x_api_key: Optional[str] = Header(None),
+    x_provider: Optional[str] = Header(None),
+):
+    api_key = x_api_key or ""
+    provider = x_provider or "gemini"
+    if not api_key:
         raise HTTPException(status_code=400, detail="No se proporciono API key.")
-
-    import google.generativeai as genai
-    genai.configure(api_key=gemini_key)
-
-    last_error = None
-    for model_name in GEMINI_MODELS:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content("Responde solo: OK")
-            return {"success": True, "model": model_name, "message": "Conexion exitosa con " + model_name}
-        except Exception as e:
-            last_error = str(e)
-            continue
-
-    err_lower = last_error.lower() if last_error else ""
-    if "429" in err_lower or "quota" in err_lower:
-        raise HTTPException(status_code=429, detail="Cuota agotada para todos los modelos. Espera o usa otra API key.")
-    raise HTTPException(status_code=400, detail=f"API key invalida o error: {last_error}")
+    return _verify_ai_key(api_key, provider)
 
 
 @app.post("/upload")
@@ -161,15 +250,16 @@ async def get_data():
 async def analyze_asesor(
     asesor_name: str,
     x_api_key: Optional[str] = Header(None),
-    api_key: Optional[str] = Query(None),
+    x_provider: Optional[str] = Header(None),
     canal: Optional[str] = Query(None),
 ):
     if not current_data.get("result"):
         raise HTTPException(status_code=400, detail="No hay datos cargados. Sube un Excel primero.")
 
-    gemini_key = x_api_key or api_key or os.getenv("GEMINI_API_KEY", "")
-    if not gemini_key:
-        raise HTTPException(status_code=400, detail="No se proporcionó API key de Gemini. Ingresa tu key en la página o configura GEMINI_API_KEY en .env")
+    api_key = x_api_key or os.getenv("GEMINI_API_KEY", "")
+    provider = x_provider or "gemini"
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No se proporciono API key.")
 
     result = current_data["result"]
     asesor_metrics = result["asesor_metrics"]
@@ -182,20 +272,18 @@ async def analyze_asesor(
             break
 
     if not asesor_data:
-        raise HTTPException(status_code=404, detail=f"Asesor '{asesor_name}' no encontrado en los datos.")
+        raise HTTPException(status_code=404, detail=f"Asesor '{asesor_name}' no encontrado.")
 
     canal_filter = canal or result.get("canal_filter", "")
     prompt = build_asesor_prompt(asesor_data, team_summary, canal_filter)
 
     try:
-        informe = _call_gemini(prompt, gemini_key)
-    except ImportError:
-        raise HTTPException(status_code=500, detail="La librería google-generativeai no está instalada. Ejecuta: pip install google-generativeai")
+        informe = _call_ai(prompt, api_key, provider)
     except Exception as e:
         err_str = str(e).lower()
-        if "429" in err_str or "quota" in err_str:
-            raise HTTPException(status_code=429, detail="Cuota de Gemini agotada. Verifica tu plan en https://ai.google.dev/gemini-api/docs/rate-limits o usa otra API key.")
-        raise HTTPException(status_code=500, detail=f"Error al conectar con Gemini: {str(e)}")
+        if "429" in err_str or "quota" in err_str or "rate" in err_str:
+            raise HTTPException(status_code=429, detail="Cuota agotada. Verifica tu plan o usa otra API key.")
+        raise HTTPException(status_code=500, detail=f"Error con {provider}: {str(e)}")
 
     return {
         "asesor": asesor_name,
@@ -207,15 +295,16 @@ async def analyze_asesor(
 @app.post("/analyze-all")
 async def analyze_all(
     x_api_key: Optional[str] = Header(None),
-    api_key: Optional[str] = Query(None),
+    x_provider: Optional[str] = Header(None),
     canal: Optional[str] = Query(None),
 ):
     if not current_data.get("result"):
         raise HTTPException(status_code=400, detail="No hay datos cargados. Sube un Excel primero.")
 
-    gemini_key = x_api_key or api_key or os.getenv("GEMINI_API_KEY", "")
-    if not gemini_key:
-        raise HTTPException(status_code=400, detail="No se proporcionó API key de Gemini.")
+    api_key = x_api_key or os.getenv("GEMINI_API_KEY", "")
+    provider = x_provider or "gemini"
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No se proporciono API key.")
 
     result = current_data["result"]
     asesor_metrics = result["asesor_metrics"]
@@ -226,26 +315,18 @@ async def analyze_all(
     for m in asesor_metrics:
         try:
             prompt = build_asesor_prompt(m, team_summary, canal_filter)
-            informe_text = _call_gemini(prompt, gemini_key)
+            informe_text = _call_ai(prompt, api_key, provider)
             informes.append({
                 "asesor": m["asesor"],
                 "informe": informe_text,
                 "metricas": m,
             })
         except Exception as e:
-            err_str = str(e).lower()
-            if "429" in err_str or "quota" in err_str:
-                informes.append({
-                    "asesor": m["asesor"],
-                    "informe": f"Error: Cuota de Gemini agotada. Verifica tu plan o usa otra API key.",
-                    "metricas": m,
-                })
-            else:
-                informes.append({
-                    "asesor": m["asesor"],
-                    "informe": f"Error generando informe: {str(e)}",
-                    "metricas": m,
-                })
+            informes.append({
+                "asesor": m["asesor"],
+                "informe": f"Error con {provider}: {str(e)}",
+                "metricas": m,
+            })
 
     return {"informes": informes}
 
@@ -278,7 +359,7 @@ def _get_asesor_data(asesor_name: str) -> dict:
     raise HTTPException(status_code=404, detail=f"Asesor '{asesor_name}' no encontrado.")
 
 
-def _generate_asesor_report(asesor_name: str, gemini_key: str, canal: str = "") -> str:
+def _generate_asesor_report(asesor_name: str, api_key: str, canal: str = "", provider: str = "gemini") -> str:
     result = current_data["result"]
     asesor_data = _get_asesor_data(asesor_name)
     team_summary = result["team_summary"]
@@ -289,7 +370,7 @@ def _generate_asesor_report(asesor_name: str, gemini_key: str, canal: str = "") 
         return current_data[cache_key]
 
     prompt = build_asesor_prompt(asesor_data, team_summary, canal_filter)
-    informe = _call_gemini(prompt, gemini_key)
+    informe = _call_ai(prompt, api_key, provider)
     current_data[cache_key] = informe
     return informe
 
@@ -298,15 +379,16 @@ def _generate_asesor_report(asesor_name: str, gemini_key: str, canal: str = "") 
 async def generate_and_cache(
     asesor_name: str,
     x_api_key: Optional[str] = Header(None),
-    api_key: Optional[str] = Query(None),
+    x_provider: Optional[str] = Header(None),
     canal: Optional[str] = Query(None),
 ):
-    gemini_key = x_api_key or api_key or os.getenv("GEMINI_API_KEY", "")
-    if not gemini_key:
-        raise HTTPException(status_code=400, detail="No se proporcionó API key de Gemini.")
+    api_key = x_api_key or os.getenv("GEMINI_API_KEY", "")
+    provider = x_provider or "gemini"
+    if not api_key:
+        raise HTTPException(status_code=400, detail="No se proporciono API key.")
 
     try:
-        informe = _generate_asesor_report(asesor_name, gemini_key, canal)
+        informe = _generate_asesor_report(asesor_name, api_key, canal, provider)
     except HTTPException:
         raise
     except Exception as e:
