@@ -27,6 +27,35 @@ def to_serializable(obj):
         return obj.tolist()
     return obj
 
+
+GEMINI_MODELS = ["gemini-2.5-pro", "gemini-2.0-flash", "gemini-2.0-flash-lite"]
+
+
+def _call_gemini(prompt: str, api_key: str) -> str:
+    import time
+    import google.generativeai as genai
+    genai.configure(api_key=api_key)
+
+    last_error = None
+    for model_name in GEMINI_MODELS:
+        for attempt in range(3):
+            try:
+                model = genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                if "429" in err_str or "quota" in err_str or "rate" in err_str:
+                    if attempt < 2:
+                        time.sleep(5 * (attempt + 1))
+                        continue
+                    else:
+                        break
+                else:
+                    raise e
+    raise Exception(f"Todos los modelos Gemini fallaron. Ultimo error: {last_error}")
+
 load_dotenv()
 
 app = FastAPI(title="Analisis de Pedidos", version="1.0")
@@ -50,6 +79,31 @@ async def serve_index():
     if html_path.exists():
         return HTMLResponse(content=html_path.read_text(encoding="utf-8"))
     return HTMLResponse(content="<h1>index.html no encontrado</h1>", status_code=404)
+
+
+@app.post("/verify-key")
+async def verify_key(x_api_key: Optional[str] = Header(None)):
+    gemini_key = x_api_key or ""
+    if not gemini_key:
+        raise HTTPException(status_code=400, detail="No se proporciono API key.")
+
+    import google.generativeai as genai
+    genai.configure(api_key=gemini_key)
+
+    last_error = None
+    for model_name in GEMINI_MODELS:
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content("Responde solo: OK")
+            return {"success": True, "model": model_name, "message": "Conexion exitosa con " + model_name}
+        except Exception as e:
+            last_error = str(e)
+            continue
+
+    err_lower = last_error.lower() if last_error else ""
+    if "429" in err_lower or "quota" in err_lower:
+        raise HTTPException(status_code=429, detail="Cuota agotada para todos los modelos. Espera o usa otra API key.")
+    raise HTTPException(status_code=400, detail=f"API key invalida o error: {last_error}")
 
 
 @app.post("/upload")
@@ -134,14 +188,13 @@ async def analyze_asesor(
     prompt = build_asesor_prompt(asesor_data, team_summary, canal_filter)
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt)
-        informe = response.text
+        informe = _call_gemini(prompt, gemini_key)
     except ImportError:
         raise HTTPException(status_code=500, detail="La librería google-generativeai no está instalada. Ejecuta: pip install google-generativeai")
     except Exception as e:
+        err_str = str(e).lower()
+        if "429" in err_str or "quota" in err_str:
+            raise HTTPException(status_code=429, detail="Cuota de Gemini agotada. Verifica tu plan en https://ai.google.dev/gemini-api/docs/rate-limits o usa otra API key.")
         raise HTTPException(status_code=500, detail=f"Error al conectar con Gemini: {str(e)}")
 
     return {
@@ -169,29 +222,30 @@ async def analyze_all(
     team_summary = result["team_summary"]
     canal_filter = canal or result.get("canal_filter", "")
 
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-2.0-flash")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error configurando Gemini: {str(e)}")
-
     informes = []
     for m in asesor_metrics:
         try:
             prompt = build_asesor_prompt(m, team_summary, canal_filter)
-            response = model.generate_content(prompt)
+            informe_text = _call_gemini(prompt, gemini_key)
             informes.append({
                 "asesor": m["asesor"],
-                "informe": response.text,
+                "informe": informe_text,
                 "metricas": m,
             })
         except Exception as e:
-            informes.append({
-                "asesor": m["asesor"],
-                "informe": f"Error generando informe: {str(e)}",
-                "metricas": m,
-            })
+            err_str = str(e).lower()
+            if "429" in err_str or "quota" in err_str:
+                informes.append({
+                    "asesor": m["asesor"],
+                    "informe": f"Error: Cuota de Gemini agotada. Verifica tu plan o usa otra API key.",
+                    "metricas": m,
+                })
+            else:
+                informes.append({
+                    "asesor": m["asesor"],
+                    "informe": f"Error generando informe: {str(e)}",
+                    "metricas": m,
+                })
 
     return {"informes": informes}
 
@@ -234,12 +288,8 @@ def _generate_asesor_report(asesor_name: str, gemini_key: str, canal: str = "") 
     if cache_key in current_data:
         return current_data[cache_key]
 
-    import google.generativeai as genai
-    genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
     prompt = build_asesor_prompt(asesor_data, team_summary, canal_filter)
-    response = model.generate_content(prompt)
-    informe = response.text
+    informe = _call_gemini(prompt, gemini_key)
     current_data[cache_key] = informe
     return informe
 
