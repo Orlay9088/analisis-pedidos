@@ -1580,30 +1580,7 @@
                     html += `</div>`;
                 }
 
-                if (metric.top_items && metric.top_items.length > 0) {
-                    const secId = asesorName + '_items';
-                    const isOpen = expandedSections[secId] !== false;
-                    html += `<div class="pivot-detail-section">`;
-                    html += `<div class="pivot-detail-header" onclick="toggleDetailSection('${secId}')">`;
-                    html += `<span class="detail-toggle">${isOpen ? '&#9660;' : '&#9654;'}</span>`;
-                    html += `<span class="detail-title">Items</span>`;
-                    html += `<span class="detail-count">${metric.top_items.length}</span>`;
-                    html += `</div>`;
-                    if (isOpen) {
-                        html += `<div class="pivot-detail-body"><table><thead><tr>`;
-                        html += `<th style="text-align:left">Item</th><th>Pedida</th><th>Pendiente</th><th>Comprom.</th><th>Registros</th>`;
-                        html += `</tr></thead><tbody>`;
-                        metric.top_items.forEach(it => {
-                            html += `<tr><td title="${escHtml(it.item)}">${escHtml(it.item)}</td>`;
-                            html += `<td style="text-align:right">${formatNum(it.cant_pedida)}</td>`;
-                            html += `<td style="text-align:right">${formatNum(it.cant_pendiente)}</td>`;
-                            html += `<td style="text-align:right">${formatNum(it.cant_comprometida)}</td>`;
-                            html += `<td style="text-align:right">${it.registros}</td></tr>`;
-                        });
-                        html += `</tbody></table></div>`;
-                    }
-                    html += `</div>`;
-                }
+
 
                 if (metric.pedidos_por_estado && Object.keys(metric.pedidos_por_estado).length > 0) {
                     const secId = asesorName + '_estados';
