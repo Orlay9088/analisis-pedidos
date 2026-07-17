@@ -116,6 +116,160 @@ def _call_ai(prompt: str, api_key: str, provider: str = "gemini") -> str:
         return _call_gemini(prompt, api_key)
 
 
+CHART_COLORS = ['#4F46E5', '#7C3AED', '#2563EB', '#3B82F6', '#8B5CF6',
+                '#A78BFA', '#C4B5FD', '#DDD6FE', '#6366F1', '#818CF8']
+
+def _chart_top_proyectos(asesor_data: dict) -> io.BytesIO:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    proyectos = asesor_data.get('top_proyectos', [])[:10]
+    if not proyectos:
+        return None
+
+    nombres = [p['proyecto'][:35] for p in reversed(proyectos)]
+    valores = [p['valor_pendiente'] for p in reversed(proyectos)]
+    comprometido = [p['v_comprometido'] for p in reversed(proyectos)]
+
+    fig, ax = plt.subplots(figsize=(9, max(3.5, len(nombres) * 0.55)))
+    y_pos = range(len(nombres))
+
+    bars1 = ax.barh(y_pos, valores, height=0.35, label='Valor Pendiente',
+                     color=CHART_COLORS[0], alpha=0.85, edgecolor='white', linewidth=0.5)
+    bars2 = ax.barh([y + 0.35 for y in y_pos], comprometido, height=0.35,
+                     label='V. Comprometido', color=CHART_COLORS[2], alpha=0.85,
+                     edgecolor='white', linewidth=0.5)
+
+    ax.set_yticks([y + 0.175 for y in y_pos])
+    ax.set_yticklabels(nombres, fontsize=8)
+    ax.set_xlabel('Valor ($)', fontsize=9)
+    ax.set_title('Top Proyectos por Valor', fontsize=12, fontweight='bold',
+                  color='#1E293B', pad=12)
+    ax.legend(fontsize=8, loc='lower right')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.grid(axis='x', alpha=0.2, linestyle='--')
+    ax.tick_params(axis='both', labelsize=8)
+
+    for bar in bars1:
+        width = bar.get_width()
+        if width > 0:
+            ax.text(width + max(valores) * 0.01, bar.get_y() + bar.get_height()/2,
+                     f'${width:,.0f}', va='center', fontsize=7, color='#475569')
+    for bar in bars2:
+        width = bar.get_width()
+        if width > 0:
+            ax.text(width + max(comprometido) * 0.01, bar.get_y() + bar.get_height()/2,
+                     f'${width:,.0f}', va='center', fontsize=7, color='#475569')
+
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _chart_estados_pedido(asesor_data: dict) -> io.BytesIO:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    estados = asesor_data.get('pedidos_por_estado', {})
+    if not estados:
+        return None
+
+    labels = list(estados.keys())
+    sizes = [estados[e]['registros'] for e in labels]
+    colors_map = {
+        'Aprobado': '#34D399', 'Retenido': '#F87171', 'En proceso': '#FBBF24',
+        'Despachado': '#60A5FA', 'Facturado': '#A78BFA', 'Pendiente': '#FDE68A',
+        'Anulado': '#94A3B8', 'Parcialmente Despachado': '#38BDF8'
+    }
+    colors = [colors_map.get(l, '#94A3B8') for l in labels]
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    wedges, texts, autotexts = ax.pie(
+        sizes, labels=labels, autopct='%1.0f%%', startangle=90,
+        colors=colors, pctdistance=0.75, labeldistance=1.15,
+        wedgeprops=dict(width=0.5, edgecolor='white', linewidth=2)
+    )
+    for t in texts:
+        t.set_fontsize(8)
+    for t in autotexts:
+        t.set_fontsize(7)
+        t.set_fontweight('bold')
+
+    ax.set_title('Distribucion por Estado de Pedido', fontsize=11,
+                  fontweight='bold', color='#1E293B', pad=12)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
+def _chart_unidades_negocio(asesor_data: dict) -> io.BytesIO:
+    import matplotlib
+    matplotlib.use('Agg')
+    import matplotlib.pyplot as plt
+
+    unidades = asesor_data.get('unidades_negocio', {})
+    if not unidades:
+        return None
+
+    items = sorted(unidades.items(), key=lambda x: x[1]['cant_pedida'], reverse=True)[:8]
+    nombres = [u[0][:25] for u in items]
+    pedidas = [u[1]['cant_pedida'] for u in items]
+    valores = [u[1]['valor'] for u in items]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
+
+    bars1 = ax1.bar(range(len(nombres)), pedidas, color=CHART_COLORS[0], alpha=0.85,
+                     edgecolor='white', linewidth=0.5)
+    ax1.set_xticks(range(len(nombres)))
+    ax1.set_xticklabels(nombres, rotation=35, ha='right', fontsize=7)
+    ax1.set_ylabel('Cant. Pedida', fontsize=8)
+    ax1.set_title('Por Cantidad Pedida', fontsize=10, fontweight='bold', color='#1E293B')
+    ax1.spines['top'].set_visible(False)
+    ax1.spines['right'].set_visible(False)
+    ax1.grid(axis='y', alpha=0.2, linestyle='--')
+    ax1.tick_params(axis='both', labelsize=7)
+    for bar in bars1:
+        h = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2, h + max(pedidas)*0.01,
+                  f'{h:,.0f}', ha='center', va='bottom', fontsize=6, color='#475569')
+
+    bars2 = ax2.bar(range(len(nombres)), valores, color=CHART_COLORS[2], alpha=0.85,
+                     edgecolor='white', linewidth=0.5)
+    ax2.set_xticks(range(len(nombres)))
+    ax2.set_xticklabels(nombres, rotation=35, ha='right', fontsize=7)
+    ax2.set_ylabel('Valor ($)', fontsize=8)
+    ax2.set_title('Por Valor', fontsize=10, fontweight='bold', color='#1E293B')
+    ax2.spines['top'].set_visible(False)
+    ax2.spines['right'].set_visible(False)
+    ax2.grid(axis='y', alpha=0.2, linestyle='--')
+    ax2.tick_params(axis='both', labelsize=7)
+    for bar in bars2:
+        h = bar.get_height()
+        ax2.text(bar.get_x() + bar.get_width()/2, h + max(valores)*0.01,
+                  f'${h:,.0f}', ha='center', va='bottom', fontsize=6, color='#475569')
+
+    plt.suptitle('Unidades de Negocio', fontsize=12, fontweight='bold',
+                  color='#1E293B', y=1.02)
+    plt.tight_layout()
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+    return buf
+
+
 def _verify_ai_key(api_key: str, provider: str = "gemini") -> dict:
     models_tried = []
     try:
@@ -483,6 +637,13 @@ async def download_word(
             row.cells[2].text = f"{data['cant_pedida']:,.0f}"
             row.cells[3].text = f"{data['cant_pendiente']:,.0f}"
 
+        chart_buf = _chart_estados_pedido(asesor_data)
+        if chart_buf:
+            doc.add_paragraph()
+            doc.add_picture(chart_buf, width=Inches(5.0))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     if asesor_data.get('top_lineas'):
         doc.add_paragraph()
         doc.add_heading('Top Lineas de Producto', level=2)
@@ -522,6 +683,13 @@ async def download_word(
             row.cells[2].text = f"${co_data['valor']:,.0f}"
             row.cells[3].text = str(co_data['registros'])
 
+        chart_buf = _chart_unidades_negocio(asesor_data)
+        if chart_buf:
+            doc.add_paragraph()
+            doc.add_picture(chart_buf, width=Inches(5.8))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
     if asesor_data.get('top_estados_produccion'):
         doc.add_paragraph()
         doc.add_heading('Estados de Produccion', level=2)
@@ -548,6 +716,13 @@ async def download_word(
             row.cells[3].text = f"{p['cant_comprometida']:,.0f}"
             row.cells[4].text = f"{p['valor_pendiente']:,.0f}"
             row.cells[5].text = f"{p['v_comprometido']:,.0f}"
+
+        chart_buf = _chart_top_proyectos(asesor_data)
+        if chart_buf:
+            doc.add_paragraph()
+            doc.add_picture(chart_buf, width=Inches(5.8))
+            last_paragraph = doc.paragraphs[-1]
+            last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         docs_por_proy = asesor_data.get('documentos_por_proyecto', {})
         for p in asesor_data['top_proyectos']:
