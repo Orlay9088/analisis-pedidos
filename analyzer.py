@@ -282,6 +282,7 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
                 top_estados_produccion[estado_str] = len(sub)
 
         top_proyectos = []
+        items_por_proyecto = {}
         if "desc_sucursal" in group.columns:
             proj_df = group.dropna(subset=["desc_sucursal"])
             if not proj_df.empty:
@@ -292,13 +293,32 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
                     registros=("desc_sucursal", "count"),
                 ).sort_values("pedida", ascending=False)
                 for proj_name, row_data in proj_agg.iterrows():
+                    proj_str = str(proj_name)
                     top_proyectos.append({
-                        "proyecto": str(proj_name),
+                        "proyecto": proj_str,
                         "cant_pedida": round(row_data["pedida"], 0),
                         "cant_pendiente": round(row_data["pendiente"], 0),
                         "cant_comprometida": round(row_data["comprometida"], 0),
                         "registros": int(row_data["registros"]),
                     })
+                    if "desc_item" in proj_df.columns:
+                        proj_items_df = proj_df[proj_df["desc_sucursal"] == proj_name].dropna(subset=["desc_item"])
+                        if not proj_items_df.empty:
+                            items_agg = proj_items_df.groupby("desc_item").agg(
+                                pedida=("cant_pedida", lambda x: _safe_sum_from_series(x)),
+                                pendiente=("cant_pendiente", lambda x: _safe_sum_from_series(x)),
+                                comprometida=("cant_comprometida", lambda x: _safe_sum_from_series(x)),
+                                registros=("desc_item", "count"),
+                            ).sort_values("pedida", ascending=False)
+                            items_por_proyecto[proj_str] = []
+                            for item_name, irow in items_agg.iterrows():
+                                items_por_proyecto[proj_str].append({
+                                    "item": str(item_name),
+                                    "cant_pedida": round(irow["pedida"], 0),
+                                    "cant_pendiente": round(irow["pendiente"], 0),
+                                    "cant_comprometida": round(irow["comprometida"], 0),
+                                    "registros": int(irow["registros"]),
+                                })
 
         top_items = []
         if "desc_item" in group.columns:
@@ -358,6 +378,7 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
             "unidades_negocio": unidades_negocio,
             "top_estados_produccion": top_estados_produccion,
             "top_proyectos": top_proyectos,
+            "items_por_proyecto": items_por_proyecto,
             "top_items": top_items,
             "desglose_contrato": desglose_contrato,
         })
