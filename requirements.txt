@@ -8,3 +8,4 @@ openai
 openpyxl
 pandas
 python-docx
+matplotlib
