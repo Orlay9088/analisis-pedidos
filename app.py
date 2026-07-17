@@ -594,14 +594,44 @@ async def download_word(
     if informe:
         doc.add_page_break()
         doc.add_heading('Informe de IA', level=1)
-        for line in informe.split('\n'):
-            stripped = line.strip()
+
+        lines = informe.split('\n')
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+
             if stripped.startswith('### '):
                 doc.add_heading(stripped[4:], level=2)
             elif stripped.startswith('## '):
                 doc.add_heading(stripped[3:], level=1)
             elif stripped.startswith('# '):
                 doc.add_heading(stripped[2:], level=0)
+
+            elif stripped.startswith('|') and '|' in stripped[1:]:
+                table_rows = []
+                while i < len(lines) and lines[i].strip().startswith('|'):
+                    row_line = lines[i].strip()
+                    cells = [c.strip() for c in row_line.split('|')[1:-1]]
+                    is_sep = all(c.replace('-', '').replace(':', '').strip() == '' for c in cells)
+                    if not is_sep:
+                        table_rows.append(cells)
+                    i += 1
+                i -= 1
+
+                if table_rows:
+                    num_cols = max(len(r) for r in table_rows)
+                    t = doc.add_table(rows=len(table_rows), cols=num_cols, style='Light Shading Accent 1')
+                    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+                    for ri, row_data in enumerate(table_rows):
+                        for ci, cell_text in enumerate(row_data):
+                            if ci < num_cols:
+                                t.rows[ri].cells[ci].text = cell_text
+                                for paragraph in t.rows[ri].cells[ci].paragraphs:
+                                    for run in paragraph.runs:
+                                        run.font.size = Pt(10)
+                                        if ri == 0:
+                                            run.bold = True
+
             elif stripped.startswith('- '):
                 doc.add_paragraph(stripped[2:], style='List Bullet')
             elif stripped:
@@ -612,6 +642,8 @@ async def download_word(
                     run.font.size = Pt(11)
                     if j % 2 == 1:
                         run.bold = True
+
+            i += 1
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -895,10 +927,66 @@ async def download_excel(
     informe = current_data.get(cache_key, "")
     if informe:
         ws_report = wb.create_sheet('Informe de IA')
-        ws_report.column_dimensions['A'].width = 100
-        for i, line in enumerate(informe.split('\n'), 1):
-            ws_report.cell(row=i, column=1, value=line)
-        ws_report['A1'].font = Font(name='Calibri', bold=True, size=14, color='4F46E5')
+        lines = informe.split('\n')
+        row = 1
+        i = 0
+        while i < len(lines):
+            stripped = lines[i].strip()
+
+            if stripped.startswith('# '):
+                ws_report.cell(row=row, column=1, value=stripped[2:]).font = Font(name='Calibri', bold=True, size=16, color='4F46E5')
+                ws_report.merge_cells(f'A{row}:F{row}')
+                row += 1
+            elif stripped.startswith('## '):
+                ws_report.cell(row=row, column=1, value=stripped[3:]).font = Font(name='Calibri', bold=True, size=13, color='4F46E5')
+                ws_report.merge_cells(f'A{row}:F{row}')
+                row += 1
+            elif stripped.startswith('### '):
+                ws_report.cell(row=row, column=1, value=stripped[4:]).font = Font(name='Calibri', bold=True, size=11, color='334155')
+                ws_report.merge_cells(f'A{row}:F{row}')
+                row += 1
+
+            elif stripped.startswith('|') and '|' in stripped[1:]:
+                table_rows = []
+                while i < len(lines) and lines[i].strip().startswith('|'):
+                    row_line = lines[i].strip()
+                    cells = [c.strip() for c in row_line.split('|')[1:-1]]
+                    is_sep = all(c.replace('-', '').replace(':', '').strip() == '' for c in cells)
+                    if not is_sep:
+                        table_rows.append(cells)
+                    i += 1
+                i -= 1
+
+                if table_rows:
+                    num_cols = max(len(r) for r in table_rows)
+                    for ri, row_data in enumerate(table_rows):
+                        for ci, cell_text in enumerate(row_data):
+                            if ci < num_cols:
+                                cell = ws_report.cell(row=row, column=ci + 1, value=cell_text)
+                                if ri == 0:
+                                    cell.font = header_font
+                                    cell.fill = header_fill
+                                else:
+                                    cell.font = Font(name='Calibri', size=10)
+                                cell.border = thin_border
+                                cell.alignment = Alignment(wrap_text=True)
+                        row += 1
+                    row += 1
+
+            elif stripped.startswith('- '):
+                ws_report.cell(row=row, column=1, value='  •  ' + stripped[2:]).font = Font(name='Calibri', size=10)
+                row += 1
+            elif stripped:
+                ws_report.cell(row=row, column=1, value=stripped).font = Font(name='Calibri', size=10)
+                row += 1
+            i += 1
+
+        ws_report.column_dimensions['A'].width = 30
+        ws_report.column_dimensions['B'].width = 20
+        ws_report.column_dimensions['C'].width = 20
+        ws_report.column_dimensions['D'].width = 20
+        ws_report.column_dimensions['E'].width = 20
+        ws_report.column_dimensions['F'].width = 20
 
     buffer = io.BytesIO()
     wb.save(buffer)
