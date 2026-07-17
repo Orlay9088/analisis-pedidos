@@ -432,7 +432,7 @@ async def download_word(
 
     subtitle = doc.add_paragraph()
     subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run(f'Canal: {canal_filter}  |  Generado con Gemini AI')
+    run = subtitle.add_run(f'Canal: {canal_filter}  |  Generado con IA')
     run.font.size = Pt(10)
     run.font.color.rgb = RGBColor(100, 116, 139)
 
@@ -533,10 +533,10 @@ async def download_word(
 
     if asesor_data.get('top_proyectos'):
         doc.add_paragraph()
-        doc.add_heading('Todos los Proyectos', level=2)
-        proj_table = doc.add_table(rows=len(asesor_data['top_proyectos']) + 1, cols=5, style='Light List Accent 1')
+        doc.add_heading('Proyectos', level=2)
+        proj_table = doc.add_table(rows=len(asesor_data['top_proyectos']) + 1, cols=6, style='Light List Accent 1')
         header_row = proj_table.rows[0]
-        for idx, h in enumerate(['Proyecto', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']):
+        for idx, h in enumerate(['Proyecto', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
             header_row.cells[idx].text = h
             for run in header_row.cells[idx].paragraphs[0].runs:
                 run.bold = True
@@ -546,24 +546,33 @@ async def download_word(
             row.cells[1].text = f"{p['cant_pedida']:,.0f}"
             row.cells[2].text = f"{p['cant_pendiente']:,.0f}"
             row.cells[3].text = f"{p['cant_comprometida']:,.0f}"
-            row.cells[4].text = str(p['registros'])
+            row.cells[4].text = f"{p['valor_pendiente']:,.0f}"
+            row.cells[5].text = f"{p['v_comprometido']:,.0f}"
 
-    if asesor_data.get('top_items'):
-        doc.add_paragraph()
-        doc.add_heading('Todos los Items', level=2)
-        item_table = doc.add_table(rows=len(asesor_data['top_items']) + 1, cols=5, style='Light List Accent 1')
-        header_row = item_table.rows[0]
-        for idx, h in enumerate(['Item', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']):
-            header_row.cells[idx].text = h
-            for run in header_row.cells[idx].paragraphs[0].runs:
-                run.bold = True
-        for i, it in enumerate(asesor_data['top_items']):
-            row = item_table.rows[i + 1]
-            row.cells[0].text = it['item']
-            row.cells[1].text = f"{it['cant_pedida']:,.0f}"
-            row.cells[2].text = f"{it['cant_pendiente']:,.0f}"
-            row.cells[3].text = f"{it['cant_comprometida']:,.0f}"
-            row.cells[4].text = str(it['registros'])
+        docs_por_proy = asesor_data.get('documentos_por_proyecto', {})
+        for p in asesor_data['top_proyectos']:
+            docs = docs_por_proy.get(p['proyecto'], [])
+            if not docs:
+                continue
+            doc.add_heading(f"  Documentos de: {p['proyecto'][:60]}", level=3)
+            doc_table = doc.add_table(rows=len(docs) + 1, cols=6, style='Light List Accent 1')
+            dh = doc_table.rows[0]
+            for idx, h in enumerate(['Documento', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
+                dh.cells[idx].text = h
+                for run in dh.cells[idx].paragraphs[0].runs:
+                    run.bold = True
+            for i, d in enumerate(docs):
+                row = doc_table.rows[i + 1]
+                row.cells[0].text = d['documento']
+                row.cells[1].text = f"{d['cant_pedida']:,.0f}"
+                row.cells[2].text = f"{d['cant_pendiente']:,.0f}"
+                row.cells[3].text = f"{d['cant_comprometida']:,.0f}"
+                row.cells[4].text = f"{d['valor_pendiente']:,.0f}"
+                row.cells[5].text = f"{d['v_comprometido']:,.0f}"
+                if d.get('items'):
+                    for it in d['items']:
+                        p_item = doc.add_paragraph(style='List Bullet')
+                        p_item.text = f"{it['item']}: pedida {it['cant_pedida']:,.0f}, pendiente {it['cant_pendiente']:,.0f}, comprometida {it['cant_comprometida']:,.0f}, valor {it['valor_pendiente']:,.0f}, v.comprom {it['v_comprometido']:,.0f}"
 
     if asesor_data.get('desglose_contrato'):
         doc.add_paragraph()
@@ -584,7 +593,7 @@ async def download_word(
 
     if informe:
         doc.add_page_break()
-        doc.add_heading('Informe de Gemini AI', level=1)
+        doc.add_heading('Informe de IA', level=1)
         for line in informe.split('\n'):
             stripped = line.strip()
             if stripped.startswith('### '):
@@ -785,8 +794,8 @@ async def download_excel(
         ws7.column_dimensions['B'].width = 15
 
     if asesor_data.get('top_proyectos'):
-        ws8 = wb.create_sheet('Todos Proyectos')
-        headers8 = ['Proyecto', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']
+        ws8 = wb.create_sheet('Proyectos')
+        headers8 = ['Proyecto', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']
         for j, h in enumerate(headers8):
             cell = ws8.cell(row=1, column=j + 1, value=h)
             cell.font = header_font
@@ -796,31 +805,72 @@ async def download_excel(
             ws8.cell(row=i + 2, column=2, value=p['cant_pedida'])
             ws8.cell(row=i + 2, column=3, value=p['cant_pendiente'])
             ws8.cell(row=i + 2, column=4, value=p['cant_comprometida'])
-            ws8.cell(row=i + 2, column=5, value=p['registros'])
+            ws8.cell(row=i + 2, column=5, value=p['valor_pendiente'])
+            ws8.cell(row=i + 2, column=6, value=p['v_comprometido'])
         ws8.column_dimensions['A'].width = 55
         ws8.column_dimensions['B'].width = 15
         ws8.column_dimensions['C'].width = 15
         ws8.column_dimensions['D'].width = 15
-        ws8.column_dimensions['E'].width = 12
+        ws8.column_dimensions['E'].width = 20
+        ws8.column_dimensions['F'].width = 20
 
-    if asesor_data.get('top_items'):
-        ws9 = wb.create_sheet('Todos Items')
-        headers9 = ['Item', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']
-        for j, h in enumerate(headers9):
-            cell = ws9.cell(row=1, column=j + 1, value=h)
-            cell.font = header_font
-            cell.fill = header_fill
-        for i, it in enumerate(asesor_data['top_items']):
-            ws9.cell(row=i + 2, column=1, value=it['item'])
-            ws9.cell(row=i + 2, column=2, value=it['cant_pedida'])
-            ws9.cell(row=i + 2, column=3, value=it['cant_pendiente'])
-            ws9.cell(row=i + 2, column=4, value=it['cant_comprometida'])
-            ws9.cell(row=i + 2, column=5, value=it['registros'])
-        ws9.column_dimensions['A'].width = 55
-        ws9.column_dimensions['B'].width = 15
-        ws9.column_dimensions['C'].width = 15
-        ws9.column_dimensions['D'].width = 15
-        ws9.column_dimensions['E'].width = 12
+        docs_por_proy = asesor_data.get('documentos_por_proyecto', {})
+        all_docs = []
+        all_items = []
+        for p in asesor_data['top_proyectos']:
+            docs = docs_por_proy.get(p['proyecto'], [])
+            for d in docs:
+                all_docs.append({**d, 'proyecto': p['proyecto']})
+                for it in d.get('items', []):
+                    all_items.append({**it, 'documento': d['documento'], 'proyecto': p['proyecto']})
+
+        if all_docs:
+            ws_doc = wb.create_sheet('Documentos')
+            doc_headers = ['Proyecto', 'Documento', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']
+            for j, h in enumerate(doc_headers):
+                cell = ws_doc.cell(row=1, column=j + 1, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+            for i, d in enumerate(all_docs):
+                ws_doc.cell(row=i + 2, column=1, value=d['proyecto'])
+                ws_doc.cell(row=i + 2, column=2, value=d['documento'])
+                ws_doc.cell(row=i + 2, column=3, value=d['cant_pedida'])
+                ws_doc.cell(row=i + 2, column=4, value=d['cant_pendiente'])
+                ws_doc.cell(row=i + 2, column=5, value=d['cant_comprometida'])
+                ws_doc.cell(row=i + 2, column=6, value=d['valor_pendiente'])
+                ws_doc.cell(row=i + 2, column=7, value=d['v_comprometido'])
+            ws_doc.column_dimensions['A'].width = 45
+            ws_doc.column_dimensions['B'].width = 20
+            ws_doc.column_dimensions['C'].width = 12
+            ws_doc.column_dimensions['D'].width = 12
+            ws_doc.column_dimensions['E'].width = 12
+            ws_doc.column_dimensions['F'].width = 18
+            ws_doc.column_dimensions['G'].width = 18
+
+        if all_items:
+            ws_it = wb.create_sheet('Items')
+            item_headers = ['Proyecto', 'Documento', 'Item', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']
+            for j, h in enumerate(item_headers):
+                cell = ws_it.cell(row=1, column=j + 1, value=h)
+                cell.font = header_font
+                cell.fill = header_fill
+            for i, it in enumerate(all_items):
+                ws_it.cell(row=i + 2, column=1, value=it['proyecto'])
+                ws_it.cell(row=i + 2, column=2, value=it['documento'])
+                ws_it.cell(row=i + 2, column=3, value=it['item'])
+                ws_it.cell(row=i + 2, column=4, value=it['cant_pedida'])
+                ws_it.cell(row=i + 2, column=5, value=it['cant_pendiente'])
+                ws_it.cell(row=i + 2, column=6, value=it['cant_comprometida'])
+                ws_it.cell(row=i + 2, column=7, value=it['valor_pendiente'])
+                ws_it.cell(row=i + 2, column=8, value=it['v_comprometido'])
+            ws_it.column_dimensions['A'].width = 40
+            ws_it.column_dimensions['B'].width = 18
+            ws_it.column_dimensions['C'].width = 45
+            ws_it.column_dimensions['D'].width = 12
+            ws_it.column_dimensions['E'].width = 12
+            ws_it.column_dimensions['F'].width = 12
+            ws_it.column_dimensions['G'].width = 18
+            ws_it.column_dimensions['H'].width = 18
 
     if asesor_data.get('desglose_contrato'):
         ws10 = wb.create_sheet('Tipo Contrato')
@@ -844,11 +894,11 @@ async def download_excel(
     cache_key = f"report_{asesor_name.strip().upper()}"
     informe = current_data.get(cache_key, "")
     if informe:
-        ws6 = wb.create_sheet('Informe Gemini AI')
-        ws6.column_dimensions['A'].width = 100
+        ws_report = wb.create_sheet('Informe de IA')
+        ws_report.column_dimensions['A'].width = 100
         for i, line in enumerate(informe.split('\n'), 1):
-            ws6.cell(row=i, column=1, value=line)
-        ws6['A1'].font = Font(name='Calibri', bold=True, size=14, color='4F46E5')
+            ws_report.cell(row=i, column=1, value=line)
+        ws_report['A1'].font = Font(name='Calibri', bold=True, size=14, color='4F46E5')
 
     buffer = io.BytesIO()
     wb.save(buffer)
