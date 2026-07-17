@@ -498,10 +498,14 @@ def build_asesor_prompt(asesor: dict, team_summary: dict, canal: str = "") -> st
 
     proyectos_text = ""
     if asesor.get("top_proyectos"):
-        proyectos_text = "\n".join(
-            f"    - {p['proyecto']}: pedida {p['cant_pedida']:,.0f}, pendiente {p['cant_pendiente']:,.0f}, comprometida {p['cant_comprometida']:,.0f}, valor pendiente {p['valor_pendiente']:,.0f}, v.comprometido {p['v_comprometido']:,.0f}"
-            for p in asesor["top_proyectos"]
-        )
+        docs_por_proy = asesor.get("documentos_por_proyecto", {})
+        for p in asesor["top_proyectos"]:
+            proyectos_text += f"    - {p['proyecto']}: pedida {p['cant_pedida']:,.0f}, pendiente {p['cant_pendiente']:,.0f}, comprometida {p['cant_comprometida']:,.0f}, valor pendiente {p['valor_pendiente']:,.0f}, v.comprometido {p['v_comprometido']:,.0f}\n"
+            docs = docs_por_proy.get(p['proyecto'], [])
+            for doc in docs:
+                proyectos_text += f"        - {doc['documento']}: pedida {doc['cant_pedida']:,.0f}, pendiente {doc['cant_pendiente']:,.0f}, comprometida {doc['cant_comprometida']:,.0f}, valor {doc['valor_pendiente']:,.0f}, v.comprom {doc['v_comprometido']:,.0f}\n"
+                for it in doc.get('items', []):
+                    proyectos_text += f"            - {it['item']}: pedida {it['cant_pedida']:,.0f}, pendiente {it['cant_pendiente']:,.0f}, comprometida {it['cant_comprometida']:,.0f}\n"
     else:
         proyectos_text = "    (Sin datos de proyectos)"
 
@@ -617,13 +621,16 @@ Analiza el porcentaje de backlog, sus causas probables y riesgos asociados.
 ### 4. VALORES MONETARIOS Y RENTABILIDAD
 Analiza los valores monetarios, utilidad y margen. Compara con el equipo.
 
-### 5. UNIDADES DE NEGOCIO Y PRODUCTOS
-Analiza las unidades de negocio que contribuyen más. Comenta las líneas de producto, items y clientes más relevantes. Analiza los proyectos principales y el desglose entre instalación y suministro.
+### 5. ANÁLISIS DE PROYECTOS, DOCUMENTOS E ITEMS
+Analiza la jerarquía completa: Proyectos → Documentos (PD-XXXX) → Items. Identifica los proyectos principales por valor pendiente y v.comprometido. Analiza qué documentos tienen mayor impacto y qué items concentran la demanda.
 
-### 6. PEDIDOS RETENIDOS Y ALERTAS
+### 6. UNIDADES DE NEGOCIO Y PRODUCTOS
+Analiza las unidades de negocio que contribuyen más. Comenta las líneas de producto, items y clientes más relevantes. Analiza el desglose entre instalación y suministro.
+
+### 7. PEDIDOS RETENIDOS Y ALERTAS
 Identifica problemas con pedidos retenidos o comprometidos parcialmente. Señala riesgos.
 
-### 7. RECOMENDACIONES ESPECÍFICAS
+### 8. RECOMENDACIONES ESPECÍFICAS
 Lista 3-5 acciones concretas y prioritarias para este asesor, basadas en datos numéricos específicos.
 
 Sé directo, profesional y basado en datos. Usa números específicos en cada recomendación."""
