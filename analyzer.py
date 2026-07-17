@@ -607,33 +607,36 @@ def build_asesor_prompt(asesor: dict, team_summary: dict, canal: str = "") -> st
 ---
 
 ## INSTRUCCIONES
-Genera un informe estructurado con las siguientes secciones usando formato Markdown:
+Genera un informe profesional usando formato Markdown. IMPORTANTE: Usa tablas Markdown para presentar datos numéricos. Ejemplo:
+| Métrica | Valor |
+|---|---|
+| Cantidad pedida | 3,255 |
 
 ### 1. RESUMEN EJECUTIVO
-Un párrafo conciso con los datos más importantes del asesor.
+Tabla resumen con los datos principales del asesor en formato | Métrica | Valor |.
 
 ### 2. ANÁLISIS DE RENDIMIENTO
-Evalúa el rendimiento comparando con el promedio del equipo. Identifica fortalezas y áreas de mejora.
+Tabla comparativa: Asesor vs Promedio Equipo. Columnas: Métrica, Asesor, Promedio Equipo, Diferencia.
 
 ### 3. ANÁLISIS DEL BACKLOG
-Analiza el porcentaje de backlog, sus causas probables y riesgos asociados.
+Tabla de backlog por estado. Análisis textual breve.
 
 ### 4. VALORES MONETARIOS Y RENTABILIDAD
-Analiza los valores monetarios, utilidad y margen. Compara con el equipo.
+Tabla con valores: Categoría, Valor Asesor, Valor Equipo, % Participación.
 
 ### 5. ANÁLISIS DE PROYECTOS, DOCUMENTOS E ITEMS
-Analiza la jerarquía completa: Proyectos → Documentos (PD-XXXX) → Items. Identifica los proyectos principales por valor pendiente y v.comprometido. Analiza qué documentos tienen mayor impacto y qué items concentran la demanda.
+Tabla de los 5-10 proyectos principales con sus 5 métricas. Mencionar documentos e items clave.
 
 ### 6. UNIDADES DE NEGOCIO Y PRODUCTOS
-Analiza las unidades de negocio que contribuyen más. Comenta las líneas de producto, items y clientes más relevantes. Analiza el desglose entre instalación y suministro.
+Tabla de unidades de negocio y tabla de top líneas/productos.
 
 ### 7. PEDIDOS RETENIDOS Y ALERTAS
-Identifica problemas con pedidos retenidos o comprometidos parcialmente. Señala riesgos.
+Tabla de estados con problemas. Alertas en lista.
 
 ### 8. RECOMENDACIONES ESPECÍFICAS
-Lista 3-5 acciones concretas y prioritarias para este asesor, basadas en datos numéricos específicos.
+Tabla con: #, Recomendación, Acción, Prioridad, Impacto Esperado.
 
-Sé directo, profesional y basado en datos. Usa números específicos en cada recomendación."""
+Sé directo, profesional y basado en datos numéricos específicos."""
 
     return prompt
 
