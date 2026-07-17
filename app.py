@@ -701,53 +701,79 @@ async def download_word(
 
     if asesor_data.get('top_proyectos'):
         doc.add_paragraph()
-        doc.add_heading('Proyectos', level=2)
-        proj_table = doc.add_table(rows=len(asesor_data['top_proyectos']) + 1, cols=6, style='Light List Accent 1')
-        header_row = proj_table.rows[0]
-        for idx, h in enumerate(['Proyecto', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
-            header_row.cells[idx].text = h
-            for run in header_row.cells[idx].paragraphs[0].runs:
-                run.bold = True
-        for i, p in enumerate(asesor_data['top_proyectos']):
-            row = proj_table.rows[i + 1]
-            row.cells[0].text = p['proyecto']
-            row.cells[1].text = f"{p['cant_pedida']:,.0f}"
-            row.cells[2].text = f"{p['cant_pendiente']:,.0f}"
-            row.cells[3].text = f"{p['cant_comprometida']:,.0f}"
-            row.cells[4].text = f"{p['valor_pendiente']:,.0f}"
-            row.cells[5].text = f"{p['v_comprometido']:,.0f}"
+        doc.add_heading('Proyectos', level=1)
 
         chart_buf = _chart_top_proyectos(asesor_data)
         if chart_buf:
-            doc.add_paragraph()
             doc.add_picture(chart_buf, width=Inches(5.8))
             last_paragraph = doc.paragraphs[-1]
             last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_paragraph()
 
         docs_por_proy = asesor_data.get('documentos_por_proyecto', {})
         for p in asesor_data['top_proyectos']:
+            doc.add_heading(p['proyecto'], level=2)
+
+            summary_table = doc.add_table(rows=2, cols=5, style='Light Shading Accent 1')
+            summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            for idx, h in enumerate(['Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
+                cell = summary_table.rows[0].cells[idx]
+                cell.text = h
+                for run in cell.paragraphs[0].runs:
+                    run.bold = True
+                    run.font.size = Pt(9)
+            vals = [f"{p['cant_pedida']:,.0f}", f"{p['cant_pendiente']:,.0f}",
+                    f"{p['cant_comprometida']:,.0f}", f"${p['valor_pendiente']:,.0f}",
+                    f"${p['v_comprometido']:,.0f}"]
+            for idx, v in enumerate(vals):
+                cell = summary_table.rows[1].cells[idx]
+                cell.text = v
+                for run in cell.paragraphs[0].runs:
+                    run.font.size = Pt(9)
+
             docs = docs_por_proy.get(p['proyecto'], [])
             if not docs:
                 continue
-            doc.add_heading(f"  Documentos de: {p['proyecto'][:60]}", level=3)
-            doc_table = doc.add_table(rows=len(docs) + 1, cols=6, style='Light List Accent 1')
-            dh = doc_table.rows[0]
-            for idx, h in enumerate(['Documento', 'Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
-                dh.cells[idx].text = h
-                for run in dh.cells[idx].paragraphs[0].runs:
-                    run.bold = True
-            for i, d in enumerate(docs):
-                row = doc_table.rows[i + 1]
-                row.cells[0].text = d['documento']
-                row.cells[1].text = f"{d['cant_pedida']:,.0f}"
-                row.cells[2].text = f"{d['cant_pendiente']:,.0f}"
-                row.cells[3].text = f"{d['cant_comprometida']:,.0f}"
-                row.cells[4].text = f"{d['valor_pendiente']:,.0f}"
-                row.cells[5].text = f"{d['v_comprometido']:,.0f}"
+
+            for d in docs:
+                doc.add_heading(d['documento'], level=3)
+
+                doc_summary = doc.add_table(rows=2, cols=5, style='Light Shading Accent 1')
+                doc_summary.alignment = WD_TABLE_ALIGNMENT.CENTER
+                for idx, h in enumerate(['Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
+                    cell = doc_summary.rows[0].cells[idx]
+                    cell.text = h
+                    for run in cell.paragraphs[0].runs:
+                        run.bold = True
+                        run.font.size = Pt(9)
+                dvals = [f"{d['cant_pedida']:,.0f}", f"{d['cant_pendiente']:,.0f}",
+                         f"{d['cant_comprometida']:,.0f}", f"${d['valor_pendiente']:,.0f}",
+                         f"${d['v_comprometido']:,.0f}"]
+                for idx, v in enumerate(dvals):
+                    cell = doc_summary.rows[1].cells[idx]
+                    cell.text = v
+                    for run in cell.paragraphs[0].runs:
+                        run.font.size = Pt(9)
+
                 if d.get('items'):
-                    for it in d['items']:
-                        p_item = doc.add_paragraph(style='List Bullet')
-                        p_item.text = f"{it['item']}: pedida {it['cant_pedida']:,.0f}, pendiente {it['cant_pendiente']:,.0f}, comprometida {it['cant_comprometida']:,.0f}, valor {it['valor_pendiente']:,.0f}, v.comprom {it['v_comprometido']:,.0f}"
+                    items_table = doc.add_table(rows=len(d['items']) + 1, cols=6, style='Light List Accent 1')
+                    ih = items_table.rows[0]
+                    for idx, h in enumerate(['Item', 'Pedida', 'Pendiente', 'Comprom.', 'Val Pend.', 'V.Comprom.']):
+                        ih.cells[idx].text = h
+                        for run in ih.cells[idx].paragraphs[0].runs:
+                            run.bold = True
+                            run.font.size = Pt(9)
+                    for i, it in enumerate(d['items']):
+                        row = items_table.rows[i + 1]
+                        row.cells[0].text = it['item']
+                        row.cells[1].text = f"{it['cant_pedida']:,.0f}"
+                        row.cells[2].text = f"{it['cant_pendiente']:,.0f}"
+                        row.cells[3].text = f"{it['cant_comprometida']:,.0f}"
+                        row.cells[4].text = f"${it['valor_pendiente']:,.0f}"
+                        row.cells[5].text = f"${it['v_comprometido']:,.0f}"
+                        for ci in range(6):
+                            for run in row.cells[ci].paragraphs[0].runs:
+                                run.font.size = Pt(9)
 
     if asesor_data.get('desglose_contrato'):
         doc.add_paragraph()
