@@ -688,24 +688,63 @@
 
         .project-stats {
             display: flex;
-            gap: 12px;
-            font-size: 0.72rem;
+            gap: 10px;
+            font-size: 0.7rem;
             font-variant-numeric: tabular-nums;
             white-space: nowrap;
         }
 
         .project-stats .ps {
-            min-width: 60px;
+            min-width: 55px;
             text-align: right;
         }
 
         .project-stats .ps.pedida { color: #60a5fa; }
         .project-stats .ps.pendiente { color: #fbbf24; }
         .project-stats .ps.comprom { color: #34d399; }
-        .project-stats .ps.regs { color: var(--text-muted); }
+        .project-stats .ps.valor { color: #a78bfa; }
+        .project-stats .ps.vcomprom { color: #f472b6; }
 
         .project-items-sub {
             padding: 4px 0 8px 20px;
+            animation: slideDown 0.2s ease;
+        }
+
+        .doc-row {
+            border-bottom: 1px solid rgba(51,65,85,0.15);
+            padding-left: 16px;
+        }
+
+        .doc-row:last-child {
+            border-bottom: none;
+        }
+
+        .doc-row-main {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 8px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+
+        .doc-row-main.has-items {
+            cursor: pointer;
+        }
+
+        .doc-row-main:hover {
+            background: rgba(99,102,241,0.06);
+        }
+
+        .doc-name {
+            font-weight: 500;
+            font-size: 0.75rem;
+            color: var(--accent-light);
+            font-family: monospace;
+        }
+
+        .items-nested {
+            padding: 2px 0 6px 22px;
             animation: slideDown 0.2s ease;
         }
 
@@ -1544,11 +1583,11 @@
                         metric.top_proyectos.forEach((p, pIdx) => {
                             const projKey = asesorName + '_proj_' + pIdx;
                             const projOpen = expandedSections[projKey] === true;
-                            const projItems = (metric.items_por_proyecto && metric.items_por_proyecto[p.proyecto]) || [];
-                            const hasItems = projItems.length > 0;
+                            const docs = (metric.documentos_por_proyecto && metric.documentos_por_proyecto[p.proyecto]) || [];
+                            const hasDocs = docs.length > 0;
                             html += `<div class="project-row">`;
-                            html += `<div class="project-row-main ${hasItems ? 'has-items' : ''}" ${hasItems ? `onclick="toggleDetailSection('${projKey}')"` : ''}>`;
-                            if (hasItems) {
+                            html += `<div class="project-row-main ${hasDocs ? 'has-items' : ''}" ${hasDocs ? `onclick="toggleDetailSection('${projKey}')"` : ''}>`;
+                            if (hasDocs) {
                                 html += `<span class="project-expand-icon">${projOpen ? '&#9660;' : '&#9654;'}</span>`;
                             }
                             html += `<div class="project-row-data">`;
@@ -1557,21 +1596,45 @@
                             html += `<span class="ps pedida">${formatNum(p.cant_pedida)}</span>`;
                             html += `<span class="ps pendiente">${formatNum(p.cant_pendiente)}</span>`;
                             html += `<span class="ps comprom">${formatNum(p.cant_comprometida)}</span>`;
-                            html += `<span class="ps regs">${p.registros}</span>`;
+                            html += `<span class="ps valor">${formatNum(p.valor_pendiente)}</span>`;
+                            html += `<span class="ps vcomprom">${formatNum(p.v_comprometido)}</span>`;
                             html += `</div></div></div>`;
-                            if (projOpen && hasItems) {
-                                html += `<div class="project-items-sub">`;
-                                html += `<table class="items-sub-table"><thead><tr>`;
-                                html += `<th style="text-align:left">Item</th><th>Pedida</th><th>Pendiente</th><th>Comprom.</th><th>Reg.</th>`;
-                                html += `</tr></thead><tbody>`;
-                                projItems.forEach(it => {
-                                    html += `<tr><td title="${escHtml(it.item)}">${escHtml(it.item)}</td>`;
-                                    html += `<td style="text-align:right">${formatNum(it.cant_pedida)}</td>`;
-                                    html += `<td style="text-align:right">${formatNum(it.cant_pendiente)}</td>`;
-                                    html += `<td style="text-align:right">${formatNum(it.cant_comprometida)}</td>`;
-                                    html += `<td style="text-align:right">${it.registros}</td></tr>`;
+                            if (projOpen && hasDocs) {
+                                docs.forEach((doc, dIdx) => {
+                                    const docKey = projKey + '_doc_' + dIdx;
+                                    const docOpen = expandedSections[docKey] === true;
+                                    const hasItems = doc.items && doc.items.length > 0;
+                                    html += `<div class="doc-row">`;
+                                    html += `<div class="doc-row-main ${hasItems ? 'has-items' : ''}" ${hasItems ? `onclick="toggleDetailSection('${docKey}')"` : ''}>`;
+                                    if (hasItems) {
+                                        html += `<span class="project-expand-icon" style="font-size:0.55rem">${docOpen ? '&#9660;' : '&#9654;'}</span>`;
+                                    }
+                                    html += `<span class="doc-name">${escHtml(doc.documento)}</span>`;
+                                    html += `<div class="project-stats">`;
+                                    html += `<span class="ps pedida">${formatNum(doc.cant_pedida)}</span>`;
+                                    html += `<span class="ps pendiente">${formatNum(doc.cant_pendiente)}</span>`;
+                                    html += `<span class="ps comprom">${formatNum(doc.cant_comprometida)}</span>`;
+                                    html += `<span class="ps valor">${formatNum(doc.valor_pendiente)}</span>`;
+                                    html += `<span class="ps vcomprom">${formatNum(doc.v_comprometido)}</span>`;
+                                    html += `</div></div>`;
+                                    if (docOpen && hasItems) {
+                                        html += `<div class="items-nested">`;
+                                        html += `<table class="items-sub-table"><thead><tr>`;
+                                        html += `<th style="text-align:left">Item</th><th>Pedida</th><th>Pendiente</th><th>Comprom.</th><th>Valor Pend.</th><th>V.Comprom.</th>`;
+                                        html += `</tr></thead><tbody>`;
+                                        doc.items.forEach(it => {
+                                            html += `<tr><td title="${escHtml(it.item)}">${escHtml(it.item)}</td>`;
+                                            html += `<td style="text-align:right">${formatNum(it.cant_pedida)}</td>`;
+                                            html += `<td style="text-align:right">${formatNum(it.cant_pendiente)}</td>`;
+                                            html += `<td style="text-align:right">${formatNum(it.cant_comprometida)}</td>`;
+                                            html += `<td style="text-align:right">${formatNum(it.valor_pendiente)}</td>`;
+                                            html += `<td style="text-align:right">${formatNum(it.v_comprometido)}</td>`;
+                                            html += `</tr>`;
+                                        });
+                                        html += `</tbody></table></div>`;
+                                    }
+                                    html += `</div>`;
                                 });
-                                html += `</tbody></table></div>`;
                             }
                             html += `</div>`;
                         });
