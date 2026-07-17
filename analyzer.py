@@ -494,17 +494,23 @@ def build_asesor_prompt(asesor: dict, team_summary: dict, canal: str = "") -> st
     proyectos_text = ""
     if asesor.get("top_proyectos"):
         proyectos_text = "\n".join(
-            f"    - {p['proyecto']}: pedida {p['cant_pedida']:,.0f}, pendiente {p['cant_pendiente']:,.0f}, comprometida {p['cant_comprometida']:,.0f} ({p['registros']} registros)"
+            f"    - {p['proyecto']}: pedida {p['cant_pedida']:,.0f}, pendiente {p['cant_pendiente']:,.0f}, comprometida {p['cant_comprometida']:,.0f}, valor pendiente {p['valor_pendiente']:,.0f}, v.comprometido {p['v_comprometido']:,.0f}"
             for p in asesor["top_proyectos"]
         )
     else:
         proyectos_text = "    (Sin datos de proyectos)"
 
     items_text = ""
-    if asesor.get("top_items"):
+    doc_items = []
+    for docs in (asesor.get("documentos_por_proyecto") or {}).values():
+        for doc in docs:
+            for it in doc.get("items", []):
+                doc_items.append(it)
+    if doc_items:
+        doc_items.sort(key=lambda x: x.get("cant_pedida", 0), reverse=True)
         items_text = "\n".join(
-            f"    - {i['item']}: pedida {i['cant_pedida']:,.0f}, pendiente {i['cant_pendiente']:,.0f}, comprometida {i['cant_comprometida']:,.0f} ({i['registros']} registros)"
-            for i in asesor["top_items"]
+            f"    - {i['item']}: pedida {i['cant_pedida']:,.0f}, pendiente {i['cant_pendiente']:,.0f}, comprometida {i['cant_comprometida']:,.0f}"
+            for i in doc_items
         )
     else:
         items_text = "    (Sin datos de items)"
