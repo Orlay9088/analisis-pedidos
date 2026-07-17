@@ -790,6 +790,24 @@
             background: rgba(99,102,241,0.04);
         }
 
+        .items-sub-table th.sortable-th {
+            cursor: pointer;
+            user-select: none;
+            transition: background 0.15s;
+        }
+
+        .items-sub-table th.sortable-th:hover {
+            background: rgba(79, 70, 229, 0.12);
+            color: var(--accent-light);
+        }
+
+        .sort-arrow {
+            font-size: 0.5rem;
+            margin-left: 3px;
+            color: var(--accent-light);
+            vertical-align: middle;
+        }
+
         .toolbar {
             display: flex;
             gap: 12px;
@@ -1626,11 +1644,22 @@
                                     html += `<span class="ps vcomprom"><span class="ps-lbl">V.C:</span> $${formatNum(doc.v_comprometido)}</span>`;
                                     html += `</div></div>`;
                                     if (docOpen && hasItems) {
+                                        const docKey = projKey + '_doc_' + dIdx;
+                                        const sort = itemSortState[docKey] || { col: 4, asc: false };
+                                        const sortedItems = sortItemsArray(doc.items, docKey);
+                                        const thLabels = ['Item', 'Pedida', 'Pendiente', 'Comprom.', 'Valor Pend.', 'V.Comprom.'];
+                                        const thKeys = ['item', 'cant_pedida', 'cant_pendiente', 'cant_comprometida', 'valor_pendiente', 'v_comprometido'];
                                         html += `<div class="items-nested">`;
                                         html += `<table class="items-sub-table"><thead><tr>`;
-                                        html += `<th style="text-align:left">Item</th><th>Pedida</th><th>Pendiente</th><th>Comprom.</th><th>Valor Pend.</th><th>V.Comprom.</th>`;
+                                        thLabels.forEach((label, ci) => {
+                                            const isActive = thKeys[ci] === (itemSortState[docKey] ? thKeys[itemSortState[docKey].col] : 'valor_pendiente');
+                                            const arrowHtml = isActive
+                                                ? `<span class="sort-arrow">${sort.asc ? '&#9650;' : '&#9660;'}</span>`
+                                                : '';
+                                            html += `<th class="sortable-th" onclick="sortItems('${docKey}', ${ci})" style="${ci === 0 ? 'text-align:left' : 'text-align:right'}">${label}${arrowHtml}</th>`;
+                                        });
                                         html += `</tr></thead><tbody>`;
-                                        doc.items.forEach(it => {
+                                        sortedItems.forEach(it => {
                                             html += `<tr><td title="${escHtml(it.item)}">${escHtml(it.item)}</td>`;
                                             html += `<td style="text-align:right">${formatNum(it.cant_pedida)}</td>`;
                                             html += `<td style="text-align:right">${formatNum(it.cant_pendiente)}</td>`;
@@ -1744,6 +1773,32 @@
             };
 
             const sortState = { col: -1, asc: true };
+            const itemSortState = {};
+
+            window.sortItems = function(docKey, colIdx) {
+                const curr = itemSortState[docKey];
+                if (curr && curr.col === colIdx) {
+                    itemSortState[docKey] = { col: colIdx, asc: !curr.asc };
+                } else {
+                    itemSortState[docKey] = { col: colIdx, asc: colIdx === 0 ? true : false };
+                }
+                render();
+            };
+
+            function sortItemsArray(items, docKey) {
+                const sort = itemSortState[docKey];
+                if (!sort) {
+                    const sorted = [...items].sort((a, b) => b.valor_pendiente - a.valor_pendiente);
+                    return sorted;
+                }
+                const keys = ['item', 'cant_pedida', 'cant_pendiente', 'cant_comprometida', 'valor_pendiente', 'v_comprometido'];
+                const key = keys[sort.col];
+                return [...items].sort((a, b) => {
+                    const va = a[key], vb = b[key];
+                    if (typeof va === 'string') return sort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+                    return sort.asc ? va - vb : vb - va;
+                });
+            }
 
             function renderSummary(data) {
                 let sumPedida = 0, sumPendiente = 0, sumComprometida = 0, sumValor = 0;
