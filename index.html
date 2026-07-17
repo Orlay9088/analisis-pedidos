@@ -705,6 +705,14 @@
         .project-stats .ps.valor { color: #a78bfa; }
         .project-stats .ps.vcomprom { color: #f472b6; }
 
+        .ps-lbl {
+            font-size: 0.6rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
         .project-items-sub {
             padding: 4px 0 8px 20px;
             animation: slideDown 0.2s ease;
@@ -1592,12 +1600,12 @@
                             }
                             html += `<div class="project-row-data">`;
                             html += `<span class="project-name" title="${escHtml(p.proyecto)}">${escHtml(p.proyecto)}</span>`;
-                            html += `<div class="project-stats">`;
-                            html += `<span class="ps pedida">${formatNum(p.cant_pedida)}</span>`;
-                            html += `<span class="ps pendiente">${formatNum(p.cant_pendiente)}</span>`;
-                            html += `<span class="ps comprom">${formatNum(p.cant_comprometida)}</span>`;
-                            html += `<span class="ps valor">${formatNum(p.valor_pendiente)}</span>`;
-                            html += `<span class="ps vcomprom">${formatNum(p.v_comprometido)}</span>`;
+                             html += `<div class="project-stats">`;
+                            html += `<span class="ps pedida"><span class="ps-lbl">Ped:</span> ${formatNum(p.cant_pedida)}</span>`;
+                            html += `<span class="ps pendiente"><span class="ps-lbl">Pend:</span> ${formatNum(p.cant_pendiente)}</span>`;
+                            html += `<span class="ps comprom"><span class="ps-lbl">Comp:</span> ${formatNum(p.cant_comprometida)}</span>`;
+                            html += `<span class="ps valor"><span class="ps-lbl">Val:</span> $${formatNum(p.valor_pendiente)}</span>`;
+                            html += `<span class="ps vcomprom"><span class="ps-lbl">V.C:</span> $${formatNum(p.v_comprometido)}</span>`;
                             html += `</div></div></div>`;
                             if (projOpen && hasDocs) {
                                 docs.forEach((doc, dIdx) => {
@@ -1611,11 +1619,11 @@
                                     }
                                     html += `<span class="doc-name">${escHtml(doc.documento)}</span>`;
                                     html += `<div class="project-stats">`;
-                                    html += `<span class="ps pedida">${formatNum(doc.cant_pedida)}</span>`;
-                                    html += `<span class="ps pendiente">${formatNum(doc.cant_pendiente)}</span>`;
-                                    html += `<span class="ps comprom">${formatNum(doc.cant_comprometida)}</span>`;
-                                    html += `<span class="ps valor">${formatNum(doc.valor_pendiente)}</span>`;
-                                    html += `<span class="ps vcomprom">${formatNum(doc.v_comprometido)}</span>`;
+                                    html += `<span class="ps pedida"><span class="ps-lbl">Ped:</span> ${formatNum(doc.cant_pedida)}</span>`;
+                                    html += `<span class="ps pendiente"><span class="ps-lbl">Pend:</span> ${formatNum(doc.cant_pendiente)}</span>`;
+                                    html += `<span class="ps comprom"><span class="ps-lbl">Comp:</span> ${formatNum(doc.cant_comprometida)}</span>`;
+                                    html += `<span class="ps valor"><span class="ps-lbl">Val:</span> $${formatNum(doc.valor_pendiente)}</span>`;
+                                    html += `<span class="ps vcomprom"><span class="ps-lbl">V.C:</span> $${formatNum(doc.v_comprometido)}</span>`;
                                     html += `</div></div>`;
                                     if (docOpen && hasItems) {
                                         html += `<div class="items-nested">`;
