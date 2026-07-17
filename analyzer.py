@@ -282,7 +282,7 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
                 top_estados_produccion[estado_str] = len(sub)
 
         top_proyectos = []
-        items_por_proyecto = {}
+        documentos_por_proyecto = {}
         if "desc_sucursal" in group.columns:
             proj_df = group.dropna(subset=["desc_sucursal"])
             if not proj_df.empty:
@@ -290,7 +290,8 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
                     pedida=("cant_pedida", lambda x: _safe_sum_from_series(x)),
                     pendiente=("cant_pendiente", lambda x: _safe_sum_from_series(x)),
                     comprometida=("cant_comprometida", lambda x: _safe_sum_from_series(x)),
-                    registros=("desc_sucursal", "count"),
+                    valor_pend=("valor_pendiente_subtotal", lambda x: _safe_sum_from_series(x)) if "valor_pendiente_subtotal" in proj_df.columns else ("cant_pedida", lambda x: 0),
+                    v_comprom=("v_comprometido", lambda x: _safe_sum_from_series(x)) if "v_comprometido" in proj_df.columns else ("cant_pedida", lambda x: 0),
                 ).sort_values("pedida", ascending=False)
                 for proj_name, row_data in proj_agg.iterrows():
                     proj_str = str(proj_name)
@@ -299,45 +300,45 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
                         "cant_pedida": round(row_data["pedida"], 0),
                         "cant_pendiente": round(row_data["pendiente"], 0),
                         "cant_comprometida": round(row_data["comprometida"], 0),
-                        "registros": int(row_data["registros"]),
+                        "valor_pendiente": round(row_data["valor_pend"], 0),
+                        "v_comprometido": round(row_data["v_comprom"], 0),
                     })
-                    if "desc_item" in proj_df.columns:
-                        proj_items_df = proj_df[proj_df["desc_sucursal"] == proj_name].dropna(subset=["desc_item"])
-                        if not proj_items_df.empty:
-                            items_agg = proj_items_df.groupby("desc_item").agg(
-                                pedida=("cant_pedida", lambda x: _safe_sum_from_series(x)),
-                                pendiente=("cant_pendiente", lambda x: _safe_sum_from_series(x)),
-                                comprometida=("cant_comprometida", lambda x: _safe_sum_from_series(x)),
-                                registros=("desc_item", "count"),
-                            ).sort_values("pedida", ascending=False)
-                            items_por_proyecto[proj_str] = []
-                            for item_name, irow in items_agg.iterrows():
-                                items_por_proyecto[proj_str].append({
-                                    "item": str(item_name),
-                                    "cant_pedida": round(irow["pedida"], 0),
-                                    "cant_pendiente": round(irow["pendiente"], 0),
-                                    "cant_comprometida": round(irow["comprometida"], 0),
-                                    "registros": int(irow["registros"]),
-                                })
-
-        top_items = []
-        if "desc_item" in group.columns:
-            item_df = group.dropna(subset=["desc_item"])
-            if not item_df.empty:
-                item_agg = item_df.groupby("desc_item").agg(
-                    pedida=("cant_pedida", lambda x: _safe_sum_from_series(x)),
-                    pendiente=("cant_pendiente", lambda x: _safe_sum_from_series(x)),
-                    comprometida=("cant_comprometida", lambda x: _safe_sum_from_series(x)),
-                    registros=("desc_item", "count"),
-                ).sort_values("pedida", ascending=False)
-                for item_name, row_data in item_agg.iterrows():
-                    top_items.append({
-                        "item": str(item_name),
-                        "cant_pedida": round(row_data["pedida"], 0),
-                        "cant_pendiente": round(row_data["pendiente"], 0),
-                        "cant_comprometida": round(row_data["comprometida"], 0),
-                        "registros": int(row_data["registros"]),
-                    })
+                    proj_docs_df = proj_df[proj_df["desc_sucursal"] == proj_name]
+                    if "documento" in proj_docs_df.columns:
+                        doc_groups = proj_docs_df.dropna(subset=["documento"]).groupby("documento")
+                        docs_list = []
+                        for doc_name, doc_sub in doc_groups:
+                            doc_str = str(doc_name).strip()
+                            items_list = []
+                            if "desc_item" in doc_sub.columns:
+                                items_df = doc_sub.dropna(subset=["desc_item"])
+                                if not items_df.empty:
+                                    items_agg = items_df.groupby("desc_item").agg(
+                                        pedida=("cant_pedida", lambda x: _safe_sum_from_series(x)),
+                                        pendiente=("cant_pendiente", lambda x: _safe_sum_from_series(x)),
+                                        comprometida=("cant_comprometida", lambda x: _safe_sum_from_series(x)),
+                                        valor_pend=("valor_pendiente_subtotal", lambda x: _safe_sum_from_series(x)) if "valor_pendiente_subtotal" in items_df.columns else ("cant_pedida", lambda x: 0),
+                                        v_comprom=("v_comprometido", lambda x: _safe_sum_from_series(x)) if "v_comprometido" in items_df.columns else ("cant_pedida", lambda x: 0),
+                                    ).sort_values("pedida", ascending=False)
+                                    for item_name, irow in items_agg.iterrows():
+                                        items_list.append({
+                                            "item": str(item_name),
+                                            "cant_pedida": round(irow["pedida"], 0),
+                                            "cant_pendiente": round(irow["pendiente"], 0),
+                                            "cant_comprometida": round(irow["comprometida"], 0),
+                                            "valor_pendiente": round(irow["valor_pend"], 0),
+                                            "v_comprometido": round(irow["v_comprom"], 0),
+                                        })
+                            docs_list.append({
+                                "documento": doc_str,
+                                "cant_pedida": round(_safe_sum(doc_sub, "cant_pedida"), 0),
+                                "cant_pendiente": round(_safe_sum(doc_sub, "cant_pendiente"), 0),
+                                "cant_comprometida": round(_safe_sum(doc_sub, "cant_comprometida"), 0),
+                                "valor_pendiente": round(_safe_sum(doc_sub, "valor_pendiente_subtotal"), 0),
+                                "v_comprometido": round(_safe_sum(doc_sub, "v_comprometido"), 0),
+                                "items": items_list,
+                            })
+                        documentos_por_proyecto[proj_str] = docs_list
 
         desglose_contrato = {}
         if "documento" in group.columns:
@@ -362,6 +363,8 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
             "cant_pedida": round(cant_pedida, 0),
             "cant_pendiente": round(cant_pendiente, 0),
             "cant_comprometida": round(cant_comprometida, 0),
+            "valor_pendiente": round(_safe_sum(group, "valor_pendiente_subtotal"), 0) if "valor_pendiente_subtotal" in group.columns else 0,
+            "v_comprometido": round(_safe_sum(group, "v_comprometido"), 0) if "v_comprometido" in group.columns else 0,
             "backlog_pct": round(backlog_pct, 0),
             "total_registros": total_registros,
             "documentos_unicos": documentos_unicos,
@@ -378,8 +381,7 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
             "unidades_negocio": unidades_negocio,
             "top_estados_produccion": top_estados_produccion,
             "top_proyectos": top_proyectos,
-            "items_por_proyecto": items_por_proyecto,
-            "top_items": top_items,
+            "documentos_por_proyecto": documentos_por_proyecto,
             "desglose_contrato": desglose_contrato,
         })
 
