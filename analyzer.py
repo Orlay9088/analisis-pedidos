@@ -179,6 +179,11 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
 
     df_valid = df.dropna(subset=["asesor"]).copy()
 
+    for col in ["asesor", "desc_sucursal", "documento", "desc_item", "desc_co", "linea", "sub_linea"]:
+        if col in df_valid.columns:
+            df_valid[col] = df_valid[col].astype(str).str.strip()
+            df_valid[col] = df_valid[col].replace({"": None, "nan": None, "None": None})
+
     results = []
     for asesor_name, group in df_valid.groupby("asesor"):
         asesor_name = str(asesor_name).strip()
