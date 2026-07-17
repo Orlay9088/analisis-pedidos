@@ -808,6 +808,44 @@
             vertical-align: middle;
         }
 
+        .sort-click {
+            cursor: pointer;
+        }
+
+        .sort-click:hover {
+            color: var(--accent-light);
+            opacity: 0.8;
+        }
+
+        .th-search-wrap {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .th-search-input {
+            width: 100%;
+            min-width: 90px;
+            padding: 2px 6px;
+            font-size: 0.65rem;
+            border: 1px solid rgba(51,65,85,0.3);
+            border-radius: 3px;
+            background: rgba(15,23,42,0.5);
+            color: var(--text-primary);
+            outline: none;
+            font-family: inherit;
+        }
+
+        .th-search-input::placeholder {
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        .th-search-input:focus {
+            border-color: var(--accent);
+            background: rgba(15,23,42,0.8);
+        }
+
         .toolbar {
             display: flex;
             gap: 12px;
@@ -1656,7 +1694,19 @@
                                             const arrowHtml = isActive
                                                 ? `<span class="sort-arrow">${sort.asc ? '&#9650;' : '&#9660;'}</span>`
                                                 : '';
-                                            html += `<th class="sortable-th" onclick="sortItems('${docKey}', ${ci})" style="${ci === 0 ? 'text-align:left' : 'text-align:right'}">${label}${arrowHtml}</th>`;
+                                            if (ci === 0) {
+                                                const filterVal = (itemFilterState[docKey] || '').replace(/"/g, '&quot;');
+                                                html += `<th class="sortable-th" style="text-align:left;padding:3px 4px">`;
+                                                html += `<div class="th-search-wrap">`;
+                                                html += `<input class="th-search-input" type="text" placeholder="Buscar item..."`;
+                                                html += ` oninput="filterItems('${docKey}', this.value)"`;
+                                                html += ` onclick="event.stopPropagation()"`;
+                                                html += ` value="${filterVal}">`;
+                                                html += `<span class="sort-arrow sort-click" onclick="sortItems('${docKey}', 0)">${arrowHtml || '&#9650;&#9660;'}</span>`;
+                                                html += `</div></th>`;
+                                            } else {
+                                                html += `<th class="sortable-th" onclick="sortItems('${docKey}', ${ci})" style="text-align:right">${label}${arrowHtml}</th>`;
+                                            }
                                         });
                                         html += `</tr></thead><tbody>`;
                                         sortedItems.forEach(it => {
@@ -1774,6 +1824,7 @@
 
             const sortState = { col: -1, asc: true };
             const itemSortState = {};
+            const itemFilterState = {};
 
             window.sortItems = function(docKey, colIdx) {
                 const curr = itemSortState[docKey];
@@ -1785,15 +1836,22 @@
                 render();
             };
 
+            window.filterItems = function(docKey, value) {
+                itemFilterState[docKey] = value;
+                render();
+            };
+
             function sortItemsArray(items, docKey) {
+                const filter = (itemFilterState[docKey] || '').toLowerCase();
+                let result = filter
+                    ? items.filter(it => it.item.toLowerCase().includes(filter))
+                    : [...items];
+
                 const sort = itemSortState[docKey];
-                if (!sort) {
-                    const sorted = [...items].sort((a, b) => b.valor_pendiente - a.valor_pendiente);
-                    return sorted;
-                }
+                if (!sort) return result.sort((a, b) => b.valor_pendiente - a.valor_pendiente);
                 const keys = ['item', 'cant_pedida', 'cant_pendiente', 'cant_comprometida', 'valor_pendiente', 'v_comprometido'];
                 const key = keys[sort.col];
-                return [...items].sort((a, b) => {
+                return result.sort((a, b) => {
                     const va = a[key], vb = b[key];
                     if (typeof va === 'string') return sort.asc ? va.localeCompare(vb) : vb.localeCompare(va);
                     return sort.asc ? va - vb : vb - va;
