@@ -437,6 +437,40 @@
             font-weight: 600;
         }
 
+        .filter-select-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-select {
+            padding: 4px 10px;
+            font-size: 0.75rem;
+            border: 1px solid var(--accent);
+            border-radius: 6px;
+            background: rgba(15,23,42,0.8);
+            color: var(--accent-light);
+            font-weight: 600;
+            cursor: pointer;
+            outline: none;
+            font-family: inherit;
+        }
+
+        .filter-select:hover {
+            border-color: var(--accent-light);
+        }
+
+        .filter-select:focus {
+            border-color: var(--accent-light);
+            box-shadow: 0 0 0 2px rgba(99,102,241,0.2);
+        }
+
+        .filter-loading {
+            font-size: 0.7rem;
+            color: var(--accent-light);
+            animation: pulse 1s infinite;
+        }
+
         .pivot-summary-bar {
             display: flex;
             gap: 20px;
@@ -1587,8 +1621,11 @@
             if (!pivot || !pivot.data || pivot.data.length === 0) return;
 
             document.getElementById('pivotSection').style.display = 'block';
-            if (pivot.filter_value) {
-                document.getElementById('pivotBadge').textContent = pivot.filter_value;
+            const pivotFilters = appData.pivot_filters || [];
+            if (pivot.filter_value || pivotFilters.length) {
+                const filterFieldName = pivotFilters.length > 0 ? pivotFilters[0].field_name : 'Filtro';
+                const filterVal = pivot.filter_value || (pivotFilters[0] && pivotFilters[0].selected[0]) || '';
+                document.getElementById('pivotBadge').textContent = filterFieldName + ': ' + filterVal;
             }
 
             const wrap = document.getElementById('pivotWrap');
@@ -1822,6 +1859,30 @@
                 render();
             };
 
+            window.changeCanalFilter = async function(newCanal) {
+                const loading = document.getElementById('filterLoading');
+                if (loading) loading.style.display = 'inline';
+                try {
+                    const resp = await fetch(`/refilter?canal=${encodeURIComponent(newCanal)}`, { method: 'POST' });
+                    const data = await resp.json();
+                    if (data.success) {
+                        appData.canal_filter = data.canal_filter;
+                        const resp2 = await fetch('/data');
+                        const newData = await resp2.json();
+                        Object.assign(appData, newData);
+                        appData.canal_filter = data.canal_filter;
+                        Object.keys(expandedRows).forEach(k => delete expandedRows[k]);
+                        Object.keys(expandedSections).forEach(k => delete expandedSections[k]);
+                        renderPivotTable();
+                        renderAsesorCards();
+                        document.getElementById('fileName').textContent = (appData.filename || '') + (data.canal_filter ? ' (' + data.canal_filter + ')' : '');
+                    }
+                } catch (e) {
+                    console.error('Error changing filter:', e);
+                }
+                if (loading) loading.style.display = 'none';
+            };
+
             const sortState = { col: -1, asc: true };
             const itemSortState = {};
             const itemFilterState = {};
@@ -1880,10 +1941,28 @@
 
             function render() {
                 let filterBar = '';
-                if (pivot.title || pivot.filter_value) {
+                const pivotFilters = appData.pivot_filters || [];
+                if (pivot.title || pivot.filter_value || pivotFilters.length) {
+                    const canalValues = appData.canal_dist_values || [];
+                    const currentFilter = appData.canal_filter || pivot.filter_value || '';
                     filterBar = '<div class="pivot-filter-bar">';
-                    filterBar += `<span class="filter-label">${pivot.title || 'Canal'}:</span>`;
-                    filterBar += `<span class="filter-value">${pivot.filter_value || 'Todos'}</span>`;
+                    const filterFieldName = pivotFilters.length > 0 ? pivotFilters[0].field_name : (pivot.title || 'Filtro');
+                    filterBar += `<span class="filter-label">${filterFieldName}:</span>`;
+                    if (canalValues.length > 1) {
+                        filterBar += `<div class="filter-select-wrap">`;
+                        filterBar += `<select class="filter-select" id="canalFilterSelect" onchange="changeCanalFilter(this.value)">`;
+                        canalValues.forEach(v => {
+                            const cleanV = typeof v === 'string' ? v.trim() : String(v);
+                            if (!cleanV) return;
+                            const selected = cleanV === currentFilter ? 'selected' : '';
+                            filterBar += `<option value="${escHtml(cleanV)}" ${selected}>${escHtml(cleanV)}</option>`;
+                        });
+                        filterBar += `</select>`;
+                        filterBar += `<span id="filterLoading" class="filter-loading" style="display:none">cambiando...</span>`;
+                        filterBar += `</div>`;
+                    } else {
+                        filterBar += `<span class="filter-value">${currentFilter || 'Todos'}</span>`;
+                    }
                     filterBar += '</div>';
                 }
 
