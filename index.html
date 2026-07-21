@@ -1649,11 +1649,24 @@
                 if (hl.includes('valor') || hl.includes('v.') || hl.includes('monto')) currencyCols.push(i);
             });
 
+            const activeAsesores = new Set((appData.asesor_metrics || []).map(m => m.asesor.trim().toUpperCase()));
             let dataRows = pivot.data.filter(row => {
                 const first = row[0];
-                return first && !String(first).toLowerCase().includes('total');
+                if (!first) return false;
+                if (String(first).toLowerCase().includes('total')) return false;
+                if (activeAsesores.size > 0 && !activeAsesores.has(String(first).trim().toUpperCase())) return false;
+                return true;
             });
-            const totalRow = pivot.data.find(row => row[0] && String(row[0]).toLowerCase().includes('total'));
+            let totalRow = pivot.data.find(row => row[0] && String(row[0]).toLowerCase().includes('total'));
+            if (activeAsesores.size > 0 && totalRow) {
+                totalRow = totalRow.map((cell, i) => {
+                    if (i === 0) return 'Total';
+                    if (typeof cell === 'number') {
+                        return dataRows.reduce((sum, r) => sum + (typeof r[i] === 'number' ? r[i] : 0), 0);
+                    }
+                    return cell;
+                });
+            }
 
             const expandedRows = {};
             const expandedSections = {};
