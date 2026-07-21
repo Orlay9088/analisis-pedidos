@@ -740,7 +740,7 @@ def _safe_sum_from_series(series: pd.Series) -> float:
     return float(pd.to_numeric(series, errors="coerce").fillna(0).sum())
 
 
-def process_excel(filepath: str) -> dict:
+def process_excel(filepath: str, canal_filter_override: str = None) -> dict:
     try:
         xls = pd.ExcelFile(filepath, engine='openpyxl')
     except Exception as e:
@@ -820,7 +820,9 @@ def process_excel(filepath: str) -> dict:
                 canal_filter = pf["selected"][0]
             break
 
-    if not canal_filter and canal_dist_values:
+    if canal_filter_override:
+        canal_filter = canal_filter_override
+    elif not canal_filter and canal_dist_values:
         canal_filter = canal_dist_values[0]
 
     df_filtered = df_raw

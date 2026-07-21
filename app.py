@@ -395,6 +395,25 @@ async def upload_excel(file: UploadFile = File(...)):
     }
 
 
+@app.post("/refilter")
+async def refilter(canal: str = Query(...)):
+    if not current_data.get("filepath"):
+        raise HTTPException(status_code=400, detail="No hay archivo cargado. Sube un Excel primero.")
+    filepath = current_data["filepath"]
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=400, detail="El archivo original ya no existe. Vuelve a subirlo.")
+    try:
+        result = process_excel(str(filepath), canal_filter_override=canal)
+        current_data["result"] = to_serializable(result)
+        return {
+            "success": True,
+            "canal_filter": result["canal_filter"],
+            "canal_dist_values": result["canal_dist_values"],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error al re-filtrar: {str(e)}")
+
+
 @app.get("/data")
 async def get_data():
     if not current_data.get("result"):
