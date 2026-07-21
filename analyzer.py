@@ -141,6 +141,88 @@ def _parse_pivot_from_df(df: pd.DataFrame) -> dict:
     }
 
 
+def _extract_pivot_filters(filepath: str) -> list[dict]:
+    """Extrae filtros reales del cache del pivot table en Excel parseando XML directamente."""
+    import zipfile
+    import xml.etree.ElementTree as ET
+
+    filters = []
+    ns = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+
+    try:
+        with zipfile.ZipFile(filepath) as z:
+            cache_files = [n for n in z.namelist()
+                          if 'pivotcachedefinition' in n.lower() and n.endswith('.xml')]
+            pt_files = [n for n in z.namelist()
+                       if 'pivottable' in n.lower() and 'cache' not in n.lower() and n.endswith('.xml')]
+
+            field_names = []
+            shared_items_map = {}
+            for cf in cache_files:
+                cf_root = ET.fromstring(z.read(cf))
+                for i, cf_elem in enumerate(cf_root.findall('.//x:cacheField', ns)):
+                    fname = cf_elem.get('name', f'Field_{i}')
+                    field_names.append(fname)
+                    si = cf_elem.find('x:sharedItems', ns)
+                    if si is not None:
+                        items = []
+                        for child in si:
+                            v = child.get('v')
+                            if v is not None:
+                                items.append(v)
+                        shared_items_map[i] = items
+
+            for pt in pt_files:
+                pt_root = ET.fromstring(z.read(pt))
+                for pfield in pt_root.findall('.//x:pivotField', ns):
+                    if pfield.get('axis') != 'axisPage':
+                        continue
+                    items_elem = pfield.find('x:items', ns)
+                    if items_elem is None:
+                        continue
+
+                    pf_elems = pt_root.findall('.//x:pageFields/x:pageField', ns)
+                    fname = 'Unknown'
+                    fld_idx = -1
+                    for pf_elem in pf_elems:
+                        fld_idx = int(pf_elem.get('fld', -1))
+                        if 0 <= fld_idx < len(field_names):
+                            fname = field_names[fld_idx]
+                            break
+
+                    field_shared = shared_items_map.get(fld_idx, [])
+
+                    selected = []
+                    hidden_vals = []
+                    all_values = []
+                    for item in items_elem.findall('x:item', ns):
+                        x = item.get('x')
+                        h = item.get('h')
+                        t = item.get('t')
+                        if t == 'default' or x is None:
+                            continue
+                        x_idx = int(x)
+                        val = field_shared[x_idx] if x_idx < len(field_shared) else str(x_idx)
+                        all_values.append(val)
+                        if h == '1':
+                            hidden_vals.append(val)
+                        else:
+                            selected.append(val)
+
+                    if selected or hidden_vals:
+                        filters.append({
+                            'field_name': fname,
+                            'selected': selected,
+                            'hidden': hidden_vals,
+                            'all_values': all_values,
+                        })
+
+    except Exception:
+        return []
+
+    return filters
+
+
 def read_raw_data(ws, col_map: dict[str, Optional[int]], filepath: str = None, sheet_name: str = None) -> pd.DataFrame:
     active_cols = {k: v for k, v in col_map.items() if v is not None}
     if not active_cols:
@@ -690,12 +772,17 @@ def process_excel(filepath: str) -> dict:
             break
 
     pivot_data = None
+    pivot_filters = []
     if pivot_sheet_name:
         try:
             df_pivot = pd.read_excel(filepath, sheet_name=pivot_sheet_name, header=None, engine='openpyxl')
             pivot_data = _parse_pivot_from_df(df_pivot)
         except Exception:
             pivot_data = None
+        try:
+            pivot_filters = _extract_pivot_filters(filepath)
+        except Exception:
+            pivot_filters = []
 
     if not data_sheet_name:
         raise ValueError("No se encontro una hoja con datos. Verifica que el archivo tenga al menos una hoja con datos.")
@@ -721,11 +808,20 @@ def process_excel(filepath: str) -> dict:
 
     canal_dist_values = []
     if "canal_dist" in df_raw.columns:
-        canal_dist_values = sorted(df_raw["canal_dist"].dropna().unique().tolist())
+        canal_dist_values = sorted([v for v in df_raw["canal_dist"].dropna().unique().tolist() if str(v).strip()])
 
     canal_filter = ""
     if pivot_data and pivot_data.get("filter_value"):
         canal_filter = pivot_data["filter_value"]
+
+    for pf in pivot_filters:
+        if pf["field_name"].upper().replace(" ", "").replace(".", "") in ["CANALDISTRIBUCION", "CANALDIST"]:
+            if pf["selected"]:
+                canal_filter = pf["selected"][0]
+            break
+
+    if not canal_filter and canal_dist_values:
+        canal_filter = canal_dist_values[0]
 
     df_filtered = df_raw
     if canal_filter and "canal_dist" in df_raw.columns:
@@ -736,6 +832,7 @@ def process_excel(filepath: str) -> dict:
 
     return {
         "pivot_table": pivot_data,
+        "pivot_filters": pivot_filters,
         "col_map": {k: v for k, v in col_map.items() if v is not None},
         "asesor_metrics": asesor_metrics,
         "team_summary": team_summary,
