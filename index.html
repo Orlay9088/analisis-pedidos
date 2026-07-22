@@ -1872,30 +1872,6 @@
                 render();
             };
 
-            window.changeCanalFilter = async function(newCanal) {
-                const loading = document.getElementById('filterLoading');
-                if (loading) loading.style.display = 'inline';
-                try {
-                    const resp = await fetch(`/refilter?canal=${encodeURIComponent(newCanal)}`, { method: 'POST' });
-                    const data = await resp.json();
-                    if (data.success) {
-                        appData.canal_filter = data.canal_filter;
-                        const resp2 = await fetch('/data');
-                        const newData = await resp2.json();
-                        Object.assign(appData, newData);
-                        appData.canal_filter = data.canal_filter;
-                        Object.keys(expandedRows).forEach(k => delete expandedRows[k]);
-                        Object.keys(expandedSections).forEach(k => delete expandedSections[k]);
-                        renderPivotTable();
-                        filterAsesores();
-                        document.getElementById('fileName').textContent = (appData.filename || '') + (data.canal_filter ? ' (' + data.canal_filter + ')' : '');
-                    }
-                } catch (e) {
-                    console.error('Error changing filter:', e);
-                }
-                if (loading) loading.style.display = 'none';
-            };
-
             const sortState = { col: -1, asc: true };
             const itemSortState = {};
             const itemFilterState = {};
@@ -1964,6 +1940,7 @@
                     if (canalValues.length > 1) {
                         filterBar += `<div class="filter-select-wrap">`;
                         filterBar += `<select class="filter-select" id="canalFilterSelect" onchange="changeCanalFilter(this.value)">`;
+                        filterBar += `<option value="__ALL__" ${!currentFilter ? 'selected' : ''}>Todos</option>`;
                         canalValues.forEach(v => {
                             const cleanV = typeof v === 'string' ? v.trim() : String(v);
                             if (!cleanV) return;
@@ -2060,6 +2037,24 @@
 
             render();
         }
+
+        window.changeCanalFilter = async function(newCanal) {
+            const loading = document.getElementById('filterLoading');
+            if (loading) loading.style.display = 'inline';
+            try {
+                const resp = await fetch(`${API_BASE}/refilter?canal=${encodeURIComponent(newCanal)}`, { method: 'POST' });
+                const data = await resp.json();
+                if (data.success) {
+                    appData = await (await fetch(`${API_BASE}/data`)).json();
+                    const cn = appData.canal_filter;
+                    document.getElementById('fileName').textContent = (appData.filename || '') + (cn ? ' (' + cn + ')' : '');
+                    renderDashboard();
+                }
+            } catch (e) {
+                console.error('Error changing filter:', e);
+            }
+            if (loading) loading.style.display = 'none';
+        };
 
         function filterAsesores() {
             if (!appData) return;

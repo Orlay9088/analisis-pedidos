@@ -839,8 +839,10 @@ def process_excel(filepath: str, canal_filter_override: str = None) -> dict:
                 canal_filter = pf["selected"][0]
             break
 
-    if canal_filter_override:
+    if canal_filter_override and canal_filter_override != "__ALL__":
         canal_filter = canal_filter_override
+    elif canal_filter_override == "__ALL__":
+        canal_filter = ""
     elif not canal_filter and canal_dist_values:
         canal_filter = canal_dist_values[0]
 
