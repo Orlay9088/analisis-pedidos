@@ -2611,7 +2611,10 @@
             try {
                 const res = await fetch(`${API_BASE}/vendors`);
                 const data = await res.json();
-                emailVendorData = data.vendors || [];
+                emailVendorData = (data.vendors || []).map(v => ({
+                    ...v,
+                    email: v.email || findAdvisorEmail(v.name),
+                }));
             } catch (e) {
                 showToast('Error al obtener lista de asesores', 'error');
                 return;
@@ -2750,19 +2753,43 @@
             }
         }
 
+        const ADVISOR_EMAILS = {
+            "INES SANCHEZ": "ines.sanchez@interdoors.com.co",
+            "ELIANA": "eliana.gonzalez@interdoors.com.co",
+            "KAROLIN": "karolin.gonzalez@interdoors.com.co",
+            "MATEO POSADA": "mateo.posada@interdoors.com.co",
+            "LEONARDO": "asesor3@interdoors.com.co",
+            "YUDY CARRASQUILLA": "yudy.carrasquilla@interdoors.com.co",
+            "LAURA OCHOA": "laura.ochoa@interdoors.com.co",
+        };
+
+        function findAdvisorEmail(name) {
+            const up = name.trim().toUpperCase();
+            if (ADVISOR_EMAILS[up]) return ADVISOR_EMAILS[up];
+            for (const [key, email] of Object.entries(ADVISOR_EMAILS)) {
+                if (up.includes(key) || key.includes(up)) return email;
+                const parts = key.split(' ');
+                if (parts.length >= 2 && parts.every(p => up.includes(p))) return email;
+            }
+            return '';
+        }
+
         async function sendSingleEmail(asesorName, btnEl) {
             if (!appData) {
                 showToast('Primero carga un archivo Excel', 'error');
                 return;
             }
 
-            let email = '';
-            try {
-                const res = await fetch(`${API_BASE}/vendors`);
-                const data = await res.json();
-                const vendor = (data.vendors || []).find(v => v.name === asesorName);
-                if (vendor) email = vendor.email;
-            } catch (e) {}
+            let email = findAdvisorEmail(asesorName);
+
+            if (!email) {
+                try {
+                    const res = await fetch(`${API_BASE}/vendors`);
+                    const data = await res.json();
+                    const vendor = (data.vendors || []).find(v => v.name === asesorName);
+                    if (vendor) email = vendor.email;
+                } catch (e) {}
+            }
 
             if (!email) {
                 showToast(`No hay correo configurado para ${asesorName}`, 'error');
