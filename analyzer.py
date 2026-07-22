@@ -476,6 +476,25 @@ def compute_asesor_metrics(df: pd.DataFrame, col_map: dict[str, Optional[int]]) 
     return results
 
 
+def _rebuild_pivot_from_metrics(metrics: list[dict], canal_filter: str) -> dict:
+    headers = ["Etiquetas de fila", "Suma de Cant. pedida", "Suma de Cant. pendiente",
+               "Suma de Cant. comprom.", "Suma de Valor pendiente subtotal", "Suma de V.COMPROMETIDO"]
+    data = []
+    for m in metrics:
+        data.append([
+            m["asesor"], m["cant_pedida"], m["cant_pendiente"],
+            m["cant_comprometida"], m["valor_pendiente"], m["v_comprometido"],
+        ])
+    total = ["Total",
+             sum(m["cant_pedida"] for m in metrics),
+             sum(m["cant_pendiente"] for m in metrics),
+             sum(m["cant_comprometida"] for m in metrics),
+             sum(m["valor_pendiente"] for m in metrics),
+             sum(m["v_comprometido"] for m in metrics)]
+    data.append(total)
+    return {"title": "CANAL DISTRIBUCION", "filter_value": canal_filter, "headers": headers, "data": data}
+
+
 def build_team_summary(metrics: list[dict]) -> dict:
     total_pedida = sum(m["cant_pedida"] for m in metrics)
     total_pendiente = sum(m["cant_pendiente"] for m in metrics)
@@ -832,8 +851,10 @@ def process_excel(filepath: str, canal_filter_override: str = None) -> dict:
     asesor_metrics = compute_asesor_metrics(df_filtered, col_map)
     team_summary = build_team_summary(asesor_metrics)
 
+    pivot_table = _rebuild_pivot_from_metrics(asesor_metrics, canal_filter)
+
     return {
-        "pivot_table": pivot_data,
+        "pivot_table": pivot_table,
         "pivot_filters": pivot_filters,
         "col_map": {k: v for k, v in col_map.items() if v is not None},
         "asesor_metrics": asesor_metrics,
