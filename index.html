@@ -1515,7 +1515,11 @@
         <div class="email-panel">
             <button class="close-btn" onclick="closeEmailPanel()">&times;</button>
             <h2>Enviar informes por correo</h2>
-            <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:16px;">Selecciona los asesores y envia sus informes como archivo Word adjunto.</p>
+            <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:12px;">Selecciona los asesores y envia sus informes como archivo Word adjunto.</p>
+
+            <div style="margin-bottom:16px;">
+                <button class="btn" onclick="testSmtp()" style="font-size:0.8rem; padding:6px 14px; border:1px solid var(--border);">Probar conexion SMTP</button>
+            </div>
 
             <div id="emailProgress" style="display:none; margin-bottom:16px;">
                 <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
@@ -1538,7 +1542,6 @@
             <div class="email-vendor-list" id="emailVendorList"></div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
-                <button class="btn" onclick="testSmtp()" style="font-size:0.8rem;">Probar conexion SMTP</button>
                 <button class="btn" onclick="closeEmailPanel()">Cancelar</button>
                 <button class="btn btn-email" id="sendEmailsBtn" onclick="sendSelectedEmails()">
                     &#9993; Enviar informes seleccionados
