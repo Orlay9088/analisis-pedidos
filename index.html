@@ -2295,7 +2295,7 @@
                             <button class="btn btn-excel" onclick="downloadReport('${escHtml(m.asesor)}', 'excel')" title="Descargar Excel">
                                 Excel
                             </button>
-                            <button class="btn btn-email" onclick="sendSingleEmail('${escHtml(m.asesor)}')" title="Enviar informe por correo" style="font-size:0.75rem; padding:7px 10px;">
+                            <button class="btn btn-email" onclick="sendSingleEmail('${escHtml(m.asesor)}', this)" title="Enviar informe por correo" style="font-size:0.75rem; padding:7px 10px;">
                                 &#9993;
                             </button>
                         </div>
@@ -2731,7 +2731,7 @@
             if (e.target === e.currentTarget) closeEmailPanel();
         });
 
-        async function sendSingleEmail(asesorName) {
+        async function sendSingleEmail(asesorName, btnEl) {
             if (!appData) {
                 showToast('Primero carga un archivo Excel', 'error');
                 return;
@@ -2750,10 +2750,9 @@
                 return;
             }
 
-            const btn = event.target;
-            btn.disabled = true;
-            const originalText = btn.innerHTML;
-            btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>';
+            btnEl.disabled = true;
+            const originalText = btnEl.innerHTML;
+            btnEl.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>';
 
             showToast(`Enviando informe a ${asesorName}...`, 'success');
 
@@ -2784,8 +2783,8 @@
             } catch (err) {
                 showToast('Error de conexion al enviar', 'error');
             } finally {
-                btn.disabled = false;
-                btn.innerHTML = originalText;
+                btnEl.disabled = false;
+                btnEl.innerHTML = originalText;
             }
         }
     </script>
