@@ -1887,7 +1887,7 @@
                         Object.keys(expandedRows).forEach(k => delete expandedRows[k]);
                         Object.keys(expandedSections).forEach(k => delete expandedSections[k]);
                         renderPivotTable();
-                        renderAsesorCards();
+                        filterAsesores();
                         document.getElementById('fileName').textContent = (appData.filename || '') + (data.canal_filter ? ' (' + data.canal_filter + ')' : '');
                     }
                 } catch (e) {
