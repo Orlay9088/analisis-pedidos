@@ -6,7 +6,7 @@ import tempfile
 import numpy as np
 from pathlib import Path
 from dotenv import load_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Query, Body
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
@@ -1395,9 +1395,27 @@ async def get_vendors():
     return {"vendors": vendors, "canal_filter": result.get("canal_filter", "")}
 
 
+@app.post("/test-smtp")
+async def test_smtp():
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+    if not smtp_user or not smtp_pass:
+        return {"success": False, "error": "Variables SMTP_USER y SMTP_PASS no configuradas."}
+    try:
+        import smtplib
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(smtp_user, smtp_pass)
+        return {"success": True, "message": "Conexion SMTP exitosa.", "user": smtp_user}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 @app.post("/send-emails")
 async def send_emails(
-    body: list[dict],
+    body: list[dict] = Body(...),
     x_api_key: Optional[str] = Header(None),
     x_provider: Optional[str] = Header(None),
 ):

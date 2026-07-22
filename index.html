@@ -1538,6 +1538,7 @@
             <div class="email-vendor-list" id="emailVendorList"></div>
 
             <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                <button class="btn" onclick="testSmtp()" style="font-size:0.8rem;">Probar conexion SMTP</button>
                 <button class="btn" onclick="closeEmailPanel()">Cancelar</button>
                 <button class="btn btn-email" id="sendEmailsBtn" onclick="sendSelectedEmails()">
                     &#9993; Enviar informes seleccionados
@@ -2730,6 +2731,21 @@
         document.getElementById('emailModal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) closeEmailPanel();
         });
+
+        async function testSmtp() {
+            showToast('Probando conexion SMTP...', 'success');
+            try {
+                const res = await fetch(`${API_BASE}/test-smtp`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(`SMTP OK - Conectado como ${data.user}`, 'success');
+                } else {
+                    showToast(`SMTP Error: ${data.error}`, 'error');
+                }
+            } catch (err) {
+                showToast(`Error de conexion: ${err.message}`, 'error');
+            }
+        }
 
         async function sendSingleEmail(asesorName, btnEl) {
             if (!appData) {
