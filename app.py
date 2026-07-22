@@ -1245,38 +1245,48 @@ def _find_advisor_email(asesor_name: str) -> str:
 
 
 def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: bytes = None, attachment_name: str = None):
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-    from email.mime.base import MIMEBase
-    from email import encoders
+    import base64
+    import urllib.request
+    import json as _json
 
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
+    resend_key = os.getenv("RESEND_API_KEY", "")
 
-    if not smtp_user or not smtp_pass:
-        raise Exception("Variables SMTP_USER y SMTP_PASS no configuradas en el servidor.")
+    if not resend_key:
+        raise Exception("Variable REEND_API_KEY no configurada en el servidor.")
 
-    msg = MIMEMultipart()
-    msg["From"] = smtp_user
-    msg["To"] = to_email
-    msg["Subject"] = subject
-
-    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+    payload = {
+        "from": "Analisis de Pedidos <onboarding@resend.dev>",
+        "to": [to_email],
+        "subject": subject,
+        "text": body_text,
+    }
 
     if attachment_bytes and attachment_name:
-        part = MIMEBase("application", "vnd.openxmlformats-officedocument.wordprocessingml.document")
-        part.set_payload(attachment_bytes)
-        encoders.encode_base64(part)
-        part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
-        msg.attach(part)
+        b64 = base64.b64encode(attachment_bytes).decode("utf-8")
+        payload["attachments"] = [{
+            "filename": attachment_name,
+            "content": b64,
+        }]
 
-    with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(smtp_user, smtp_pass)
-        server.send_message(msg)
+    data = _json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        "https://api.resend.com/emails",
+        data=data,
+        headers={
+            "Authorization": f"Bearer {resend_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            result = _json.loads(resp.read().decode("utf-8"))
+            if resp.status not in (200, 201):
+                raise Exception(f"Resend error: {result}")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8") if e.fp else ""
+        raise Exception(f"Resend HTTP {e.code}: {body}")
 
 
 def _generate_word_bytes(asesor_name: str, canal: str = "") -> bytes:
@@ -1397,20 +1407,10 @@ async def get_vendors():
 
 @app.post("/test-smtp")
 async def test_smtp():
-    smtp_user = os.getenv("SMTP_USER", "")
-    smtp_pass = os.getenv("SMTP_PASS", "")
-    if not smtp_user or not smtp_pass:
-        return {"success": False, "error": "Variables SMTP_USER y SMTP_PASS no configuradas."}
-    try:
-        import smtplib
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=10) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-            server.login(smtp_user, smtp_pass)
-        return {"success": True, "message": "Conexion SMTP exitosa.", "user": smtp_user}
-    except Exception as e:
-        return {"success": False, "error": str(e)}
+    resend_key = os.getenv("RESEND_API_KEY", "")
+    if not resend_key:
+        return {"success": False, "error": "Variable RESEND_API_KEY no configurada."}
+    return {"success": True, "message": "Resend API configurada.", "key_prefix": resend_key[:8] + "..."}
 
 
 @app.post("/send-emails")
