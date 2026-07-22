@@ -1271,7 +1271,7 @@ def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: b
         part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
         msg.attach(part)
 
-    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+    with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
         server.ehlo()
         server.starttls()
         server.ehlo()
@@ -1424,12 +1424,17 @@ async def send_emails(
 
     api_key = x_api_key or os.getenv("GEMINI_API_KEY", "")
     provider = x_provider or "gemini"
+    canal_global = ""
 
     results = []
+
+    import asyncio
+
     for item in body:
         vendor_name = item.get("name", "")
         email = item.get("email", "")
         canal = item.get("canal", "")
+        canal_global = canal
 
         if not vendor_name or not email:
             results.append({"name": vendor_name, "email": email, "success": False, "error": "Sin correo configurado"})
@@ -1438,12 +1443,12 @@ async def send_emails(
         cache_key = f"report_{vendor_name.strip().upper()}"
         if cache_key not in current_data and api_key:
             try:
-                _generate_asesor_report(vendor_name, api_key, canal, provider)
+                await asyncio.to_thread(_generate_asesor_report, vendor_name, api_key, canal, provider)
             except Exception:
                 pass
 
         try:
-            word_bytes = _generate_word_bytes(vendor_name, canal)
+            word_bytes = await asyncio.to_thread(_generate_word_bytes, vendor_name, canal)
             safe_name = vendor_name.replace(' ', '_').replace('.', '').replace('/', '_')
             attachment_name = f"Informe_{safe_name}.docx"
 
@@ -1456,7 +1461,8 @@ Canal: {canal or 'Todos'}
 ---
 Este informe fue generado automaticamente por el Sistema de Analisis de Pedidos.
 """
-            _send_email(
+            await asyncio.to_thread(
+                _send_email,
                 to_email=email,
                 subject=f"Informe de Ventas - {vendor_name}",
                 body_text=body_text,
