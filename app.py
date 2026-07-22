@@ -1417,11 +1417,12 @@ async def send_emails(
             results.append({"name": vendor_name, "email": email, "success": False, "error": "Sin correo configurado"})
             continue
 
-        try:
-            informe = _generate_asesor_report(vendor_name, api_key, canal, provider)
-        except Exception as e:
-            results.append({"name": vendor_name, "email": email, "success": False, "error": f"Error generando informe: {str(e)}"})
-            continue
+        cache_key = f"report_{vendor_name.strip().upper()}"
+        if cache_key not in current_data and api_key:
+            try:
+                _generate_asesor_report(vendor_name, api_key, canal, provider)
+            except Exception:
+                pass
 
         try:
             word_bytes = _generate_word_bytes(vendor_name, canal)
