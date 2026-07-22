@@ -1231,6 +1231,19 @@ ADVISOR_EMAILS = {
 }
 
 
+def _find_advisor_email(asesor_name: str) -> str:
+    name_upper = asesor_name.strip().upper()
+    if name_upper in ADVISOR_EMAILS:
+        return ADVISOR_EMAILS[name_upper]
+    for key, email in ADVISOR_EMAILS.items():
+        if key in name_upper or name_upper in key:
+            return email
+        key_parts = key.split()
+        if len(key_parts) >= 2 and all(p in name_upper for p in key_parts):
+            return email
+    return ""
+
+
 def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: bytes = None, attachment_name: str = None):
     import smtplib
     from email.mime.multipart import MIMEMultipart
@@ -1369,7 +1382,7 @@ async def get_vendors():
     vendors = []
     for m in result["asesor_metrics"]:
         name_upper = m["asesor"].strip().upper()
-        email = ADVISOR_EMAILS.get(name_upper, "")
+        email = _find_advisor_email(m["asesor"])
         vendors.append({
             "name": m["asesor"],
             "email": email,

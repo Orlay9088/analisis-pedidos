@@ -2737,17 +2737,14 @@
                 return;
             }
 
-            const nameUpper = asesorName.trim().toUpperCase();
-            const vendorMap = {
-                "INES SANCHEZ": "ines.sanchez@interdoors.com.co",
-                "ELIANA": "eliana.gonzalez@interdoors.com.co",
-                "KAROLIN": "karolin.gonzalez@interdoors.com.co",
-                "MATEO POSADA": "mateo.posada@interdoors.com.co",
-                "LEONARDO": "asesor3@interdoors.com.co",
-                "YUDY CARRASQUILLA": "yudy.carrasquilla@interdoors.com.co",
-                "LAURA OCHOA": "laura.ochoa@interdoors.com.co",
-            };
-            const email = vendorMap[nameUpper];
+            let email = '';
+            try {
+                const res = await fetch(`${API_BASE}/vendors`);
+                const data = await res.json();
+                const vendor = (data.vendors || []).find(v => v.name === asesorName);
+                if (vendor) email = vendor.email;
+            } catch (e) {}
+
             if (!email) {
                 showToast(`No hay correo configurado para ${asesorName}`, 'error');
                 return;
