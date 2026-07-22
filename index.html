@@ -1303,6 +1303,79 @@
             font-size: 0.9rem;
         }
 
+        .btn-email {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.85rem;
+            transition: all 0.2s;
+        }
+        .btn-email:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.3); }
+        .btn-email:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .email-modal {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px);
+            display: none; align-items: center; justify-content: center;
+            z-index: 1000; padding: 20px;
+        }
+        .email-modal.active { display: flex; }
+
+        .email-panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 30px;
+            width: 100%; max-width: 650px;
+            max-height: 85vh; overflow-y: auto;
+            position: relative;
+            box-shadow: var(--shadow);
+        }
+        .email-panel h2 { font-size: 1.3rem; margin-bottom: 4px; }
+
+        .email-vendor-list { display: flex; flex-direction: column; gap: 8px; }
+
+        .email-vendor-item {
+            display: flex; align-items: center; gap: 12px;
+            padding: 10px 14px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            transition: all 0.2s;
+        }
+        .email-vendor-item:hover { border-color: var(--accent); }
+        .email-vendor-item.no-email { opacity: 0.5; }
+
+        .email-vendor-item input[type="checkbox"] {
+            width: 18px; height: 18px;
+            accent-color: var(--accent);
+            flex-shrink: 0;
+        }
+        .email-vendor-info { flex: 1; min-width: 0; }
+        .email-vendor-name { font-weight: 600; font-size: 0.9rem; }
+        .email-vendor-email { font-size: 0.75rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .email-vendor-badge {
+            font-size: 0.65rem; padding: 2px 8px;
+            border-radius: 10px; white-space: nowrap;
+            font-weight: 600;
+        }
+        .email-vendor-badge.ok { background: var(--green-bg); color: var(--green); }
+        .email-vendor-badge.warn { background: var(--yellow-bg); color: var(--yellow); }
+
+        .email-result-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 12px; margin-bottom: 4px;
+            border-radius: var(--radius-sm);
+            font-size: 0.8rem;
+        }
+        .email-result-item.success { background: var(--green-bg); color: var(--green); }
+        .email-result-item.error { background: var(--red-bg); color: var(--red); }
+
         @media (max-width: 768px) {
             .header { padding: 15px 20px; flex-direction: column; gap: 12px; }
             .container { padding: 20px; }
@@ -1373,6 +1446,9 @@
                 <button class="btn btn-primary" id="analyzeAllBtn" onclick="analyzeAll()">
                     Generar informes para todos
                 </button>
+                <button class="btn btn-email" onclick="openEmailPanel()">
+                    &#9993; Enviar informes por correo
+                </button>
             </div>
 
             <div id="progressSection" class="progress-ctr">
@@ -1434,6 +1510,41 @@
     </div>
 
     <div class="toast" id="toast"></div>
+
+    <div class="email-modal" id="emailModal">
+        <div class="email-panel">
+            <button class="close-btn" onclick="closeEmailPanel()">&times;</button>
+            <h2>Enviar informes por correo</h2>
+            <p style="color:var(--text-secondary); font-size:0.85rem; margin-bottom:16px;">Selecciona los asesores y envia sus informes como archivo Word adjunto.</p>
+
+            <div id="emailProgress" style="display:none; margin-bottom:16px;">
+                <div style="display:flex; justify-content:space-between; margin-bottom:6px;">
+                    <span id="emailProgressText" style="color:var(--text-secondary); font-size:0.85rem;">Enviando...</span>
+                    <span id="emailProgressCount" style="color:var(--text-secondary); font-size:0.85rem;"></span>
+                </div>
+                <div class="progress-bar"><div class="fill" id="emailProgressFill" style="width:0%"></div></div>
+            </div>
+
+            <div id="emailResults" style="display:none; margin-bottom:16px;"></div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span id="emailVendorCount" style="color:var(--text-muted); font-size:0.85rem;"></span>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn" onclick="selectAllVendors(true)" style="font-size:0.8rem; padding:4px 12px;">Todas</button>
+                    <button class="btn" onclick="selectAllVendors(false)" style="font-size:0.8rem; padding:4px 12px;">Ninguna</button>
+                </div>
+            </div>
+
+            <div class="email-vendor-list" id="emailVendorList"></div>
+
+            <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+                <button class="btn" onclick="closeEmailPanel()">Cancelar</button>
+                <button class="btn btn-email" id="sendEmailsBtn" onclick="sendSelectedEmails()">
+                    &#9993; Enviar informes seleccionados
+                </button>
+            </div>
+        </div>
+    </div>
 
     <script>
         const API_BASE = location.hostname === 'localhost' || location.hostname === '127.0.0.1'
@@ -2476,6 +2587,146 @@
                 await downloadReport(currentReportAsesor, format);
             }
         }
+
+        let emailVendorData = [];
+
+        async function openEmailPanel() {
+            if (!appData) {
+                showToast('Primero carga un archivo Excel', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('emailModal');
+            document.getElementById('emailProgress').style.display = 'none';
+            document.getElementById('emailResults').style.display = 'none';
+            document.getElementById('emailResults').innerHTML = '';
+
+            try {
+                const res = await fetch(`${API_BASE}/vendors`);
+                const data = await res.json();
+                emailVendorData = data.vendors || [];
+            } catch (e) {
+                showToast('Error al obtener lista de asesores', 'error');
+                return;
+            }
+
+            renderVendorList();
+            modal.classList.add('active');
+        }
+
+        function closeEmailPanel() {
+            document.getElementById('emailModal').classList.remove('active');
+        }
+
+        function renderVendorList() {
+            const list = document.getElementById('emailVendorList');
+            const count = document.getElementById('emailVendorCount');
+
+            const withEmail = emailVendorData.filter(v => v.email);
+            count.textContent = `${withEmail.length} de ${emailVendorData.length} asesores con correo configurado`;
+
+            list.innerHTML = emailVendorData.map((v, i) => {
+                const hasEmail = !!v.email;
+                return `
+                    <div class="email-vendor-item ${hasEmail ? '' : 'no-email'}">
+                        <input type="checkbox" id="ev${i}" ${hasEmail ? 'checked' : ''} ${hasEmail ? '' : 'disabled'}>
+                        <div class="email-vendor-info">
+                            <div class="email-vendor-name">${escHtml(v.name)}</div>
+                            <div class="email-vendor-email">${hasEmail ? escHtml(v.email) : 'Sin correo configurado'}</div>
+                        </div>
+                        <span class="email-vendor-badge ${hasEmail ? 'ok' : 'warn'}">
+                            ${hasEmail ? 'OK' : 'Sin correo'}
+                        </span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function selectAllVendors(selectAll) {
+            emailVendorData.forEach((v, i) => {
+                const cb = document.getElementById(`ev${i}`);
+                if (cb && v.email) cb.checked = selectAll;
+            });
+        }
+
+        async function sendSelectedEmails() {
+            const selected = [];
+            emailVendorData.forEach((v, i) => {
+                const cb = document.getElementById(`ev${i}`);
+                if (cb && cb.checked && v.email) {
+                    selected.push(v);
+                }
+            });
+
+            if (selected.length === 0) {
+                showToast('Selecciona al menos un asesor con correo', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('sendEmailsBtn');
+            const progress = document.getElementById('emailProgress');
+            const progressText = document.getElementById('emailProgressText');
+            const progressCount = document.getElementById('emailProgressCount');
+            const progressFill = document.getElementById('emailProgressFill');
+            const resultsDiv = document.getElementById('emailResults');
+
+            btn.disabled = true;
+            progress.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            progressFill.style.width = '0%';
+            progressText.textContent = `Enviando informes a ${selected.length} asesores...`;
+            progressCount.textContent = `0 / ${selected.length}`;
+
+            const canal = appData.canal_filter || '';
+
+            try {
+                const res = await fetch(`${API_BASE}/send-emails`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Api-Key': getApiKey(),
+                        'X-Provider': document.getElementById('aiProvider').value,
+                    },
+                    body: JSON.stringify(selected.map(v => ({
+                        name: v.name,
+                        email: v.email,
+                        canal: canal,
+                    }))),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    showToast(data.detail || 'Error al enviar correos', 'error');
+                    return;
+                }
+
+                const sent = data.results.filter(r => r.success).length;
+                const failed = data.results.filter(r => !r.success).length;
+
+                progressFill.style.width = '100%';
+                progressText.textContent = `Completado: ${sent} enviados, ${failed} fallidos`;
+
+                resultsDiv.style.display = 'block';
+                resultsDiv.innerHTML = data.results.map(r => {
+                    const cls = r.success ? 'success' : 'error';
+                    const icon = r.success ? '&#10003;' : '&#10007;';
+                    const detail = r.success ? `Enviado a ${r.email}` : `${r.error}`;
+                    return `<div class="email-result-item ${cls}"><span>${icon}</span> <strong>${escHtml(r.name)}</strong> — ${detail}</div>`;
+                }).join('');
+
+                showToast(`${sent} informes enviados correctamente`, sent > 0 ? 'success' : 'error');
+            } catch (err) {
+                showToast('Error de conexion al enviar correos', 'error');
+                progressText.textContent = 'Error de conexion';
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        document.getElementById('emailModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeEmailPanel();
+        });
     </script>
 
 </body>

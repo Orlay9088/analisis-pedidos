@@ -1220,6 +1220,224 @@ async def download_excel(
     )
 
 
+ADVISOR_EMAILS = {
+    "INES SANCHEZ": "ines.sanchez@interdoors.com.co",
+    "ELIANA": "eliana.gonzalez@interdoors.com.co",
+    "KAROLIN": "karolin.gonzalez@interdoors.com.co",
+    "MATEO POSADA": "mateo.posada@interdoors.com.co",
+    "LEONARDO": "asesor3@interdoors.com.co",
+    "YUDY CARRASQUILLA": "yudy.carrasquilla@interdoors.com.co",
+    "LAURA OCHOA": "laura.ochoa@interdoors.com.co",
+}
+
+
+def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: bytes = None, attachment_name: str = None):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_pass = os.getenv("SMTP_PASS", "")
+
+    if not smtp_user or not smtp_pass:
+        raise Exception("Variables SMTP_USER y SMTP_PASS no configuradas en el servidor.")
+
+    msg = MIMEMultipart()
+    msg["From"] = smtp_user
+    msg["To"] = to_email
+    msg["Subject"] = subject
+
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+
+    if attachment_bytes and attachment_name:
+        part = MIMEBase("application", "vnd.openxmlformats-officedocument.wordprocessingml.document")
+        part.set_payload(attachment_bytes)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
+        msg.attach(part)
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(smtp_user, smtp_pass)
+        server.send_message(msg)
+
+
+def _generate_word_bytes(asesor_name: str, canal: str = "") -> bytes:
+    result = current_data["result"]
+    asesor_data = _get_asesor_data(asesor_name)
+    canal_filter = canal or result.get("canal_filter", "")
+    cache_key = f"report_{asesor_name.strip().upper()}"
+    informe = current_data.get(cache_key, "")
+
+    from docx import Document
+    from docx.shared import Inches, Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.table import WD_TABLE_ALIGNMENT
+
+    doc = Document()
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Calibri'
+    font.size = Pt(11)
+
+    title = doc.add_heading('', level=0)
+    run = title.add_run(f'Informe de Ventas - {asesor_name}')
+    run.font.color.rgb = RGBColor(79, 70, 229)
+    run.font.size = Pt(22)
+
+    subtitle = doc.add_paragraph()
+    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = subtitle.add_run(f'Canal: {canal_filter}  |  Generado con IA')
+    run.font.size = Pt(10)
+    run.font.color.rgb = RGBColor(100, 116, 139)
+
+    doc.add_paragraph()
+    doc.add_heading('Metricas del Asesor', level=1)
+    table = doc.add_table(rows=10, cols=2, style='Light Shading Accent 1')
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    metrics_data = [
+        ('Cantidad Pedida', f"{asesor_data['cant_pedida']:,.0f}"),
+        ('Cantidad Pendiente', f"{asesor_data['cant_pendiente']:,.0f}"),
+        ('Cantidad Comprometida', f"{asesor_data['cant_comprometida']:,.0f}"),
+        ('Backlog', f"{asesor_data['backlog_pct']}%"),
+        ('Valor Total (V.UNIDAD)', f"${asesor_data.get('valor_total', 0):,.0f}"),
+        ('Utilidad Promedio', f"${asesor_data.get('utilidad_promedio', 0):,.0f}"),
+        ('Margen Promedio', f"{asesor_data.get('margen_promedio', 0):.0f}%"),
+        ('Descuentos Totales', f"${asesor_data.get('descuento_total', 0):,.0f}"),
+        ('Documentos Unicos', str(asesor_data['documentos_unicos'])),
+        ('Total Registros', str(asesor_data['total_registros'])),
+    ]
+    for i, (label, value) in enumerate(metrics_data):
+        row = table.rows[i]
+        row.cells[0].text = label
+        row.cells[1].text = value
+        for cell in row.cells:
+            for paragraph in cell.paragraphs:
+                for r in paragraph.runs:
+                    r.font.size = Pt(10)
+
+    if asesor_data.get('top_proyectos'):
+        doc.add_paragraph()
+        doc.add_heading('Proyectos', level=1)
+        chart_buf = _chart_top_proyectos(asesor_data)
+        if chart_buf:
+            doc.add_picture(chart_buf, width=Inches(5.8))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            doc.add_paragraph()
+
+    if informe:
+        doc.add_page_break()
+        doc.add_heading('Informe de IA', level=1)
+        lines = informe.split('\n')
+        idx = 0
+        while idx < len(lines):
+            stripped = lines[idx].strip()
+            if stripped.startswith('### '):
+                doc.add_heading(stripped[4:], level=2)
+            elif stripped.startswith('## '):
+                doc.add_heading(stripped[3:], level=1)
+            elif stripped.startswith('# '):
+                doc.add_heading(stripped[2:], level=0)
+            elif stripped.startswith('- '):
+                doc.add_paragraph(stripped[2:], style='List Bullet')
+            elif stripped:
+                p = doc.add_paragraph()
+                parts = stripped.split('**')
+                for j, part in enumerate(parts):
+                    r = p.add_run(part)
+                    r.font.size = Pt(11)
+                    if j % 2 == 1:
+                        r.bold = True
+            idx += 1
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.read()
+
+
+@app.get("/vendors")
+async def get_vendors():
+    if not current_data.get("result"):
+        raise HTTPException(status_code=400, detail="No hay datos cargados.")
+
+    result = current_data["result"]
+    vendors = []
+    for m in result["asesor_metrics"]:
+        name_upper = m["asesor"].strip().upper()
+        email = ADVISOR_EMAILS.get(name_upper, "")
+        vendors.append({
+            "name": m["asesor"],
+            "email": email,
+            "cant_pedida": m["cant_pedida"],
+            "cant_pendiente": m["cant_pendiente"],
+            "valor_total": m.get("valor_total", 0),
+            "backlog_pct": m["backlog_pct"],
+            "documentos_unicos": m["documentos_unicos"],
+        })
+    return {"vendors": vendors, "canal_filter": result.get("canal_filter", "")}
+
+
+@app.post("/send-emails")
+async def send_emails(
+    body: list[dict],
+    x_api_key: Optional[str] = Header(None),
+    x_provider: Optional[str] = Header(None),
+):
+    if not current_data.get("result"):
+        raise HTTPException(status_code=400, detail="No hay datos cargados.")
+
+    api_key = x_api_key or os.getenv("GEMINI_API_KEY", "")
+    provider = x_provider or "gemini"
+
+    results = []
+    for item in body:
+        vendor_name = item.get("name", "")
+        email = item.get("email", "")
+        canal = item.get("canal", "")
+
+        if not vendor_name or not email:
+            results.append({"name": vendor_name, "email": email, "success": False, "error": "Sin correo configurado"})
+            continue
+
+        try:
+            informe = _generate_asesor_report(vendor_name, api_key, canal, provider)
+        except Exception as e:
+            results.append({"name": vendor_name, "email": email, "success": False, "error": f"Error generando informe: {str(e)}"})
+            continue
+
+        try:
+            word_bytes = _generate_word_bytes(vendor_name, canal)
+            safe_name = vendor_name.replace(' ', '_').replace('.', '').replace('/', '_')
+            attachment_name = f"Informe_{safe_name}.docx"
+
+            body_text = f"""Hola {vendor_name},
+
+Adjunto encontras tu informe de ventas.
+
+Canal: {canal or 'Todos'}
+
+---
+Este informe fue generado automaticamente por el Sistema de Analisis de Pedidos.
+"""
+            _send_email(
+                to_email=email,
+                subject=f"Informe de Ventas - {vendor_name}",
+                body_text=body_text,
+                attachment_bytes=word_bytes,
+                attachment_name=attachment_name,
+            )
+            results.append({"name": vendor_name, "email": email, "success": True})
+        except Exception as e:
+            results.append({"name": vendor_name, "email": email, "success": False, "error": str(e)})
+
+    return {"results": results}
+
+
 if __name__ == "__main__":
     import uvicorn
     port = int(os.environ.get("PORT", 8000))
