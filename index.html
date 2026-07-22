@@ -2295,6 +2295,9 @@
                             <button class="btn btn-excel" onclick="downloadReport('${escHtml(m.asesor)}', 'excel')" title="Descargar Excel">
                                 Excel
                             </button>
+                            <button class="btn btn-email" onclick="sendSingleEmail('${escHtml(m.asesor)}')" title="Enviar informe por correo" style="font-size:0.75rem; padding:7px 10px;">
+                                &#9993;
+                            </button>
                         </div>
                     </div>
                 `;
@@ -2727,6 +2730,67 @@
         document.getElementById('emailModal').addEventListener('click', (e) => {
             if (e.target === e.currentTarget) closeEmailPanel();
         });
+
+        async function sendSingleEmail(asesorName) {
+            if (!appData) {
+                showToast('Primero carga un archivo Excel', 'error');
+                return;
+            }
+
+            const nameUpper = asesorName.trim().toUpperCase();
+            const vendorMap = {
+                "INES SANCHEZ": "ines.sanchez@interdoors.com.co",
+                "ELIANA": "eliana.gonzalez@interdoors.com.co",
+                "KAROLIN": "karolin.gonzalez@interdoors.com.co",
+                "MATEO POSADA": "mateo.posada@interdoors.com.co",
+                "LEONARDO": "asesor3@interdoors.com.co",
+                "YUDY CARRASQUILLA": "yudy.carrasquilla@interdoors.com.co",
+                "LAURA OCHOA": "laura.ochoa@interdoors.com.co",
+            };
+            const email = vendorMap[nameUpper];
+            if (!email) {
+                showToast(`No hay correo configurado para ${asesorName}`, 'error');
+                return;
+            }
+
+            const btn = event.target;
+            btn.disabled = true;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="spinner" style="width:12px;height:12px;border-width:2px;"></span>';
+
+            showToast(`Enviando informe a ${asesorName}...`, 'success');
+
+            try {
+                const canal = appData.canal_filter || '';
+                const res = await fetch(`${API_BASE}/send-emails`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Api-Key': getApiKey(),
+                        'X-Provider': document.getElementById('aiProvider').value,
+                    },
+                    body: JSON.stringify([{
+                        name: asesorName,
+                        email: email,
+                        canal: canal,
+                    }]),
+                });
+
+                const data = await res.json();
+
+                if (data.results && data.results[0] && data.results[0].success) {
+                    showToast(`Informe enviado a ${email}`, 'success');
+                } else {
+                    const err = data.results?.[0]?.error || 'Error al enviar';
+                    showToast(`Error: ${err}`, 'error');
+                }
+            } catch (err) {
+                showToast('Error de conexion al enviar', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
     </script>
 
 </body>
