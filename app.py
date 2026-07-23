@@ -10,7 +10,9 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Query, Bod
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-from docx.shared import RGBColor
+from docx.shared import RGBColor, Pt, Inches, Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 from analyzer import process_excel, build_asesor_prompt
 
