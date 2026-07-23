@@ -10,6 +10,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, Header, Query, Bod
 from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
+from docx.shared import RGBColor
 
 from analyzer import process_excel, build_asesor_prompt
 
@@ -596,65 +597,25 @@ async def download_word(
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Calibri'
-    font.size = Pt(11)
+    font.size = Pt(10)
 
-    title = doc.add_heading('', level=0)
-    run = title.add_run(f'Informe de Ventas - {asesor_name}')
-    run.font.color.rgb = RGBColor(79, 70, 229)
-    run.font.size = Pt(22)
-
-    subtitle = doc.add_paragraph()
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run(f'Canal: {canal_filter}  |  Generado con IA')
-    run.font.size = Pt(10)
-    run.font.color.rgb = RGBColor(100, 116, 139)
-
-    doc.add_paragraph()
-
-    doc.add_heading('Metricas del Asesor', level=1)
-    table = doc.add_table(rows=10, cols=2, style='Light Shading Accent 1')
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-
-    metrics_data = [
-        ('Cantidad Pedida', f"{asesor_data['cant_pedida']:,.0f}"),
-        ('Cantidad Pendiente', f"{asesor_data['cant_pendiente']:,.0f}"),
-        ('Cantidad Comprometida', f"{asesor_data['cant_comprometida']:,.0f}"),
-        ('Backlog', f"{asesor_data['backlog_pct']}%"),
-        ('Valor Total (V.UNIDAD)', f"${asesor_data.get('valor_total', 0):,.0f}"),
-        ('Utilidad Promedio', f"${asesor_data.get('utilidad_promedio', 0):,.0f}"),
-        ('Margen Promedio', f"{asesor_data.get('margen_promedio', 0):.0f}%"),
-        ('Descuentos Totales', f"${asesor_data.get('descuento_total', 0):,.0f}"),
-        ('Documentos Unicos', str(asesor_data['documentos_unicos'])),
-        ('Total Registros', str(asesor_data['total_registros'])),
-    ]
-
-    for i, (label, value) in enumerate(metrics_data):
-        row = table.rows[i]
-        row.cells[0].text = label
-        row.cells[1].text = value
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    run.font.size = Pt(10)
+    _add_title_page(doc, asesor_name, canal_filter)
+    _add_kpi_summary(doc, asesor_data)
 
     if asesor_data.get('pedidos_por_estado'):
-        doc.add_paragraph()
-        doc.add_heading('Pedidos por Estado', level=2)
-        estado_table = doc.add_table(rows=len(asesor_data['pedidos_por_estado']) + 1, cols=4, style='Light List Accent 1')
-        header_row = estado_table.rows[0]
-        header_row.cells[0].text = 'Estado'
-        header_row.cells[1].text = 'Registros'
-        header_row.cells[2].text = 'Cant. Pedida'
-        header_row.cells[3].text = 'Cant. Pendiente'
-        for cell_idx in range(4):
-            for run in header_row.cells[cell_idx].paragraphs[0].runs:
-                run.bold = True
+        doc.add_heading('Distribucion por Estado', level=1)
+        estado_table = doc.add_table(rows=len(asesor_data['pedidos_por_estado']) + 1, cols=4, style='Table Grid')
+        estado_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Estado', 'Registros', 'Cant. Pedida', 'Cant. Pendiente']):
+            estado_table.rows[0].cells[idx].text = h
+        _style_header_row(estado_table.rows[0], 4, font_size=9)
         for i, (estado, data) in enumerate(asesor_data['pedidos_por_estado'].items()):
             row = estado_table.rows[i + 1]
             row.cells[0].text = estado
             row.cells[1].text = str(data['registros'])
             row.cells[2].text = f"{data['cant_pedida']:,.0f}"
             row.cells[3].text = f"{data['cant_pendiente']:,.0f}"
+        _style_alt_rows(estado_table, start_row=1, font_size=9)
 
         chart_buf = _chart_estados_pedido(asesor_data)
         if chart_buf:
@@ -664,43 +625,33 @@ async def download_word(
             last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     if asesor_data.get('top_lineas'):
-        doc.add_paragraph()
-        doc.add_heading('Top Lineas de Producto', level=2)
-        linea_table = doc.add_table(rows=len(asesor_data['top_lineas']) + 1, cols=3, style='Light List Accent 1')
-        header_row = linea_table.rows[0]
-        header_row.cells[0].text = 'Linea'
-        header_row.cells[1].text = 'Cant. Pedida'
-        header_row.cells[2].text = 'Registros'
-        for run in header_row.cells[0].paragraphs[0].runs:
-            run.bold = True
-        for run in header_row.cells[1].paragraphs[0].runs:
-            run.bold = True
-        for run in header_row.cells[2].paragraphs[0].runs:
-            run.bold = True
+        doc.add_heading('Lineas de Producto', level=1)
+        linea_table = doc.add_table(rows=len(asesor_data['top_lineas']) + 1, cols=3, style='Table Grid')
+        linea_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Linea', 'Cant. Pedida', 'Registros']):
+            linea_table.rows[0].cells[idx].text = h
+        _style_header_row(linea_table.rows[0], 3, font_size=9)
         for i, linea in enumerate(asesor_data['top_lineas']):
             row = linea_table.rows[i + 1]
             row.cells[0].text = linea['linea']
             row.cells[1].text = f"{linea['cant_pedida']:,.0f}"
             row.cells[2].text = str(linea['registros'])
+        _style_alt_rows(linea_table, start_row=1, font_size=9)
 
     if asesor_data.get('unidades_negocio'):
-        doc.add_paragraph()
-        doc.add_heading('Unidades de Negocio', level=2)
-        co_table = doc.add_table(rows=len(asesor_data['unidades_negocio']) + 1, cols=4, style='Light List Accent 1')
-        header_row = co_table.rows[0]
-        header_row.cells[0].text = 'Unidad'
-        header_row.cells[1].text = 'Cant. Pedida'
-        header_row.cells[2].text = 'Valor'
-        header_row.cells[3].text = 'Registros'
-        for cell_idx in range(4):
-            for run in header_row.cells[cell_idx].paragraphs[0].runs:
-                run.bold = True
+        doc.add_heading('Unidades de Negocio', level=1)
+        co_table = doc.add_table(rows=len(asesor_data['unidades_negocio']) + 1, cols=4, style='Table Grid')
+        co_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Unidad', 'Cant. Pedida', 'Valor', 'Registros']):
+            co_table.rows[0].cells[idx].text = h
+        _style_header_row(co_table.rows[0], 4, font_size=9)
         for i, (co_name, co_data) in enumerate(asesor_data['unidades_negocio'].items()):
             row = co_table.rows[i + 1]
             row.cells[0].text = co_name
             row.cells[1].text = f"{co_data['cant_pedida']:,.0f}"
             row.cells[2].text = f"${co_data['valor']:,.0f}"
             row.cells[3].text = str(co_data['registros'])
+        _style_alt_rows(co_table, start_row=1, font_size=9)
 
         chart_buf = _chart_unidades_negocio(asesor_data)
         if chart_buf:
@@ -710,16 +661,20 @@ async def download_word(
             last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
     if asesor_data.get('top_estados_produccion'):
-        doc.add_paragraph()
-        doc.add_heading('Estados de Produccion', level=2)
-        est_table = doc.add_table(rows=len(asesor_data['top_estados_produccion']), cols=2, style='Light List Accent 1')
+        doc.add_heading('Estados de Produccion', level=1)
+        est_table = doc.add_table(rows=len(asesor_data['top_estados_produccion']) + 1, cols=2, style='Table Grid')
+        est_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Estado', 'Cantidad']):
+            est_table.rows[0].cells[idx].text = h
+        _style_header_row(est_table.rows[0], 2, font_size=9)
         for i, (estado, cant) in enumerate(asesor_data['top_estados_produccion'].items()):
-            row = est_table.rows[i]
+            row = est_table.rows[i + 1]
             row.cells[0].text = estado
             row.cells[1].text = str(cant)
+        _style_alt_rows(est_table, start_row=1, font_size=9)
 
     if asesor_data.get('top_proyectos'):
-        doc.add_paragraph()
+        doc.add_page_break()
         doc.add_heading('Proyectos', level=1)
 
         chart_buf = _chart_top_proyectos(asesor_data)
@@ -733,22 +688,16 @@ async def download_word(
         for p in asesor_data['top_proyectos']:
             doc.add_heading(p['proyecto'], level=2)
 
-            summary_table = doc.add_table(rows=2, cols=5, style='Light Shading Accent 1')
+            summary_table = doc.add_table(rows=2, cols=5, style='Table Grid')
             summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
             for idx, h in enumerate(['Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
-                cell = summary_table.rows[0].cells[idx]
-                cell.text = h
-                for run in cell.paragraphs[0].runs:
-                    run.bold = True
-                    run.font.size = Pt(9)
-            vals = [f"{p['cant_pedida']:,.0f}", f"{p['cant_pendiente']:,.0f}",
-                    f"{p['cant_comprometida']:,.0f}", f"${p['valor_pendiente']:,.0f}",
-                    f"${p['v_comprometido']:,.0f}"]
-            for idx, v in enumerate(vals):
-                cell = summary_table.rows[1].cells[idx]
-                cell.text = v
-                for run in cell.paragraphs[0].runs:
-                    run.font.size = Pt(9)
+                summary_table.rows[0].cells[idx].text = h
+            _style_header_row(summary_table.rows[0], 5, font_size=9)
+            for idx, v in enumerate([f"{p['cant_pedida']:,.0f}", f"{p['cant_pendiente']:,.0f}",
+                                     f"{p['cant_comprometida']:,.0f}", f"${p['valor_pendiente']:,.0f}",
+                                     f"${p['v_comprometido']:,.0f}"]):
+                summary_table.rows[1].cells[idx].text = v
+            _style_alt_rows(summary_table, start_row=1, font_size=9)
 
             docs = docs_por_proy.get(p['proyecto'], [])
             if not docs:
@@ -757,52 +706,40 @@ async def download_word(
             for d in docs:
                 doc.add_heading(d['documento'], level=3)
 
-                doc_summary = doc.add_table(rows=2, cols=5, style='Light Shading Accent 1')
+                doc_summary = doc.add_table(rows=2, cols=5, style='Table Grid')
                 doc_summary.alignment = WD_TABLE_ALIGNMENT.CENTER
                 for idx, h in enumerate(['Pedida', 'Pendiente', 'Comprometida', 'Valor Pend.', 'V.Comprometido']):
-                    cell = doc_summary.rows[0].cells[idx]
-                    cell.text = h
-                    for run in cell.paragraphs[0].runs:
-                        run.bold = True
-                        run.font.size = Pt(9)
-                dvals = [f"{d['cant_pedida']:,.0f}", f"{d['cant_pendiente']:,.0f}",
-                         f"{d['cant_comprometida']:,.0f}", f"${d['valor_pendiente']:,.0f}",
-                         f"${d['v_comprometido']:,.0f}"]
-                for idx, v in enumerate(dvals):
-                    cell = doc_summary.rows[1].cells[idx]
-                    cell.text = v
-                    for run in cell.paragraphs[0].runs:
-                        run.font.size = Pt(9)
+                    doc_summary.rows[0].cells[idx].text = h
+                _style_header_row(doc_summary.rows[0], 5, font_size=9)
+                for idx, v in enumerate([f"{d['cant_pedida']:,.0f}", f"{d['cant_pendiente']:,.0f}",
+                                         f"{d['cant_comprometida']:,.0f}", f"${d['valor_pendiente']:,.0f}",
+                                         f"${d['v_comprometido']:,.0f}"]):
+                    doc_summary.rows[1].cells[idx].text = v
+                _style_alt_rows(doc_summary, start_row=1, font_size=9)
 
                 if d.get('items'):
-                    items_table = doc.add_table(rows=len(d['items']) + 1, cols=6, style='Light List Accent 1')
-                    ih = items_table.rows[0]
+                    items_table = doc.add_table(rows=len(d['items']) + 1, cols=6, style='Table Grid')
+                    items_table.alignment = WD_TABLE_ALIGNMENT.CENTER
                     for idx, h in enumerate(['Item', 'Pedida', 'Pendiente', 'Comprom.', 'Val Pend.', 'V.Comprom.']):
-                        ih.cells[idx].text = h
-                        for run in ih.cells[idx].paragraphs[0].runs:
-                            run.bold = True
-                            run.font.size = Pt(9)
+                        items_table.rows[0].cells[idx].text = h
+                    _style_header_row(items_table.rows[0], 6, font_size=8)
                     for i, it in enumerate(d['items']):
                         row = items_table.rows[i + 1]
-                        row.cells[0].text = it['item']
+                        row.cells[0].text = it['item'][:50]
                         row.cells[1].text = f"{it['cant_pedida']:,.0f}"
                         row.cells[2].text = f"{it['cant_pendiente']:,.0f}"
                         row.cells[3].text = f"{it['cant_comprometida']:,.0f}"
                         row.cells[4].text = f"${it['valor_pendiente']:,.0f}"
                         row.cells[5].text = f"${it['v_comprometido']:,.0f}"
-                        for ci in range(6):
-                            for run in row.cells[ci].paragraphs[0].runs:
-                                run.font.size = Pt(9)
+                    _style_alt_rows(items_table, start_row=1, font_size=8)
 
     if asesor_data.get('desglose_contrato'):
-        doc.add_paragraph()
-        doc.add_heading('Tipo de Contrato (Instalacion vs Suministro)', level=2)
-        cont_table = doc.add_table(rows=len(asesor_data['desglose_contrato']) + 1, cols=5, style='Light List Accent 1')
-        header_row = cont_table.rows[0]
+        doc.add_heading('Tipo de Contrato (Instalacion vs Suministro)', level=1)
+        cont_table = doc.add_table(rows=len(asesor_data['desglose_contrato']) + 1, cols=5, style='Table Grid')
+        cont_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         for idx, h in enumerate(['Tipo', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']):
-            header_row.cells[idx].text = h
-            for run in header_row.cells[idx].paragraphs[0].runs:
-                run.bold = True
+            cont_table.rows[0].cells[idx].text = h
+        _style_header_row(cont_table.rows[0], 5, font_size=9)
         for i, (tipo, d) in enumerate(asesor_data['desglose_contrato'].items()):
             row = cont_table.rows[i + 1]
             row.cells[0].text = tipo
@@ -810,60 +747,12 @@ async def download_word(
             row.cells[2].text = f"{d['pendiente']:,.0f}"
             row.cells[3].text = f"{d['comprometida']:,.0f}"
             row.cells[4].text = str(d['registros'])
+        _style_alt_rows(cont_table, start_row=1, font_size=9)
 
     if informe:
         doc.add_page_break()
-        doc.add_heading('Informe de IA', level=1)
-
-        lines = informe.split('\n')
-        i = 0
-        while i < len(lines):
-            stripped = lines[i].strip()
-
-            if stripped.startswith('### '):
-                doc.add_heading(stripped[4:], level=2)
-            elif stripped.startswith('## '):
-                doc.add_heading(stripped[3:], level=1)
-            elif stripped.startswith('# '):
-                doc.add_heading(stripped[2:], level=0)
-
-            elif stripped.startswith('|') and '|' in stripped[1:]:
-                table_rows = []
-                while i < len(lines) and lines[i].strip().startswith('|'):
-                    row_line = lines[i].strip()
-                    cells = [c.strip() for c in row_line.split('|')[1:-1]]
-                    is_sep = all(c.replace('-', '').replace(':', '').strip() == '' for c in cells)
-                    if not is_sep:
-                        table_rows.append(cells)
-                    i += 1
-                i -= 1
-
-                if table_rows:
-                    num_cols = max(len(r) for r in table_rows)
-                    t = doc.add_table(rows=len(table_rows), cols=num_cols, style='Light Shading Accent 1')
-                    t.alignment = WD_TABLE_ALIGNMENT.CENTER
-                    for ri, row_data in enumerate(table_rows):
-                        for ci, cell_text in enumerate(row_data):
-                            if ci < num_cols:
-                                t.rows[ri].cells[ci].text = cell_text
-                                for paragraph in t.rows[ri].cells[ci].paragraphs:
-                                    for run in paragraph.runs:
-                                        run.font.size = Pt(10)
-                                        if ri == 0:
-                                            run.bold = True
-
-            elif stripped.startswith('- '):
-                doc.add_paragraph(stripped[2:], style='List Bullet')
-            elif stripped:
-                p = doc.add_paragraph()
-                parts = stripped.split('**')
-                for j, part in enumerate(parts):
-                    run = p.add_run(part)
-                    run.font.size = Pt(11)
-                    if j % 2 == 1:
-                        run.bold = True
-
-            i += 1
+        doc.add_heading('Analisis con Inteligencia Artificial', level=1)
+        _add_markdown_to_doc(doc, informe)
 
     buffer = io.BytesIO()
     doc.save(buffer)
@@ -1342,6 +1231,243 @@ def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: b
         raise Exception(f"Resend HTTP {e.code}: {body}")
 
 
+ACCENT_COLOR = RGBColor(79, 70, 229)
+HEADER_BG = '4F46E5'
+HEADER_FG = RGBColor(255, 255, 255)
+ALT_ROW_BG = 'F1F5F9'
+SUBTITLE_COLOR = RGBColor(100, 116, 139)
+DARK_TEXT = RGBColor(30, 41, 59)
+GREEN_COLOR = RGBColor(34, 197, 94)
+RED_COLOR = RGBColor(239, 68, 68)
+YELLOW_COLOR = RGBColor(234, 179, 8)
+
+
+def _style_header_row(row, num_cols, font_size=9):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    for ci in range(num_cols):
+        cell = row.cells[ci]
+        tc = cell._tc
+        tcPr = tc.get_or_add_tcPr()
+        shd = OxmlElement('w:shd')
+        shd.set(qn('w:fill'), HEADER_BG)
+        shd.set(qn('w:val'), 'clear')
+        tcPr.append(shd)
+        for paragraph in cell.paragraphs:
+            for run in paragraph.runs:
+                run.font.size = Pt(font_size)
+                run.font.color.rgb = HEADER_FG
+                run.bold = True
+
+
+def _style_alt_rows(table, start_row=1, font_size=9):
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    for ri in range(start_row, len(table.rows)):
+        if ri % 2 == 0:
+            for cell in table.rows[ri].cells:
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                shd = OxmlElement('w:shd')
+                shd.set(qn('w:fill'), ALT_ROW_BG)
+                shd.set(qn('w:val'), 'clear')
+                tcPr.append(shd)
+        for cell in table.rows[ri].cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    run.font.size = Pt(font_size)
+                    run.font.color.rgb = DARK_TEXT
+
+
+def _add_bold_text(paragraph, text, font_size=11, color=None):
+    parts = text.split('**')
+    for j, part in enumerate(parts):
+        if not part:
+            continue
+        run = paragraph.add_run(part)
+        run.font.size = Pt(font_size)
+        run.bold = (j % 2 == 1)
+        if color:
+            run.font.color.rgb = color
+
+
+def _add_markdown_to_doc(doc, informe):
+    if not informe:
+        return
+    lines = informe.split('\n')
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+
+        if stripped.startswith('#### '):
+            p = doc.add_paragraph()
+            _add_bold_text(p, stripped[5:], font_size=11, color=DARK_TEXT)
+            p.paragraph_format.space_before = Pt(4)
+            p.paragraph_format.space_after = Pt(2)
+
+        elif stripped.startswith('### '):
+            doc.add_heading(stripped[4:], level=3)
+
+        elif stripped.startswith('## '):
+            doc.add_heading(stripped[3:], level=2)
+
+        elif stripped.startswith('# '):
+            doc.add_heading(stripped[2:], level=1)
+
+        elif stripped.startswith('|') and '|' in stripped[1:]:
+            table_rows = []
+            while i < len(lines) and lines[i].strip().startswith('|'):
+                row_line = lines[i].strip()
+                cells = [c.strip() for c in row_line.split('|')[1:-1]]
+                is_sep = all(c.replace('-', '').replace(':', '').strip() == '' for c in cells)
+                if not is_sep:
+                    table_rows.append(cells)
+                i += 1
+            i -= 1
+
+            if table_rows:
+                num_cols = max(len(r) for r in table_rows)
+                t = doc.add_table(rows=len(table_rows), cols=num_cols, style='Table Grid')
+                t.alignment = WD_TABLE_ALIGNMENT.CENTER
+                for ri, row_data in enumerate(table_rows):
+                    for ci, cell_text in enumerate(row_data):
+                        if ci < num_cols:
+                            t.rows[ri].cells[ci].text = cell_text
+                _style_header_row(t.rows[0], num_cols, font_size=9)
+                _style_alt_rows(t, start_row=1, font_size=9)
+
+        elif stripped.startswith('- '):
+            p = doc.add_paragraph(style='List Bullet')
+            _add_bold_text(p, stripped[2:], font_size=10)
+
+        elif len(stripped) > 2 and stripped[0].isdigit() and stripped[1] in '.)':
+            p = doc.add_paragraph(style='List Number')
+            _add_bold_text(p, stripped[2:].strip() if stripped[1] == '.' else stripped[3:].strip(), font_size=10)
+
+        elif stripped.startswith('> '):
+            p = doc.add_paragraph()
+            p.paragraph_format.left_indent = Inches(0.3)
+            run = p.add_run(stripped[2:])
+            run.font.size = Pt(10)
+            run.font.italic = True
+            run.font.color.rgb = SUBTITLE_COLOR
+
+        elif stripped == '---' or stripped == '***':
+            p = doc.add_paragraph()
+            p.paragraph_format.space_before = Pt(6)
+            p.paragraph_format.space_after = Pt(6)
+            run = p.add_run('─' * 60)
+            run.font.size = Pt(6)
+            run.font.color.rgb = RGBColor(203, 213, 225)
+
+        elif stripped:
+            p = doc.add_paragraph()
+            _add_bold_text(p, stripped, font_size=10)
+
+        i += 1
+
+
+def _add_title_page(doc, asesor_name, canal_filter):
+    for _ in range(4):
+        doc.add_paragraph()
+
+    title = doc.add_paragraph()
+    title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = title.add_run('INFORME DE VENTAS')
+    run.font.size = Pt(28)
+    run.font.color.rgb = ACCENT_COLOR
+    run.bold = True
+
+    doc.add_paragraph()
+
+    name_p = doc.add_paragraph()
+    name_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = name_p.add_run(asesor_name)
+    run.font.size = Pt(18)
+    run.font.color.rgb = DARK_TEXT
+    run.bold = True
+
+    doc.add_paragraph()
+
+    info_p = doc.add_paragraph()
+    info_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = info_p.add_run(f'Canal: {canal_filter}')
+    run.font.size = Pt(12)
+    run.font.color.rgb = SUBTITLE_COLOR
+
+    doc.add_paragraph()
+
+    line_p = doc.add_paragraph()
+    line_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = line_p.add_run('─' * 40)
+    run.font.size = Pt(8)
+    run.font.color.rgb = RGBColor(203, 213, 225)
+
+    doc.add_paragraph()
+
+    footer_p = doc.add_paragraph()
+    footer_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    from datetime import datetime
+    run = footer_p.add_run(f'Generado el {datetime.now().strftime("%d/%m/%Y")}')
+    run.font.size = Pt(10)
+    run.font.color.rgb = SUBTITLE_COLOR
+
+    doc.add_page_break()
+
+
+def _add_kpi_summary(doc, asesor_data):
+    doc.add_heading('Resumen de Metricas', level=1)
+    table = doc.add_table(rows=5, cols=4, style='Table Grid')
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    kpis = [
+        ('Cant. Pedida', f"{asesor_data['cant_pedida']:,.0f}", GREEN_COLOR),
+        ('Cant. Pendiente', f"{asesor_data['cant_pendiente']:,.0f}", YELLOW_COLOR),
+        ('Cant. Comprometida', f"{asesor_data['cant_comprometida']:,.0f}", ACCENT_COLOR),
+        ('Backlog', f"{asesor_data['backlog_pct']}%", RED_COLOR if asesor_data['backlog_pct'] > 70 else GREEN_COLOR),
+        ('Valor Total', f"${asesor_data.get('valor_total', 0):,.0f}", ACCENT_COLOR),
+        ('Utilidad Prom.', f"${asesor_data.get('utilidad_promedio', 0):,.0f}", GREEN_COLOR),
+        ('Margen Prom.', f"{asesor_data.get('margen_promedio', 0):.0f}%", GREEN_COLOR),
+        ('Descuentos', f"${asesor_data.get('descuento_total', 0):,.0f}", RED_COLOR if asesor_data.get('descuento_total', 0) > 0 else GREEN_COLOR),
+        ('Docs Unicos', str(asesor_data['documentos_unicos']), ACCENT_COLOR),
+        ('Total Registros', str(asesor_data['total_registros']), ACCENT_COLOR),
+        ('', '', None),
+        ('', '', None),
+    ]
+
+    for ri in range(5):
+        for ci in range(2):
+            kpi_idx = ri * 2 + ci
+            if kpi_idx < len(kpis):
+                label, value, color = kpis[kpi_idx]
+                if label:
+                    label_cell = table.rows[ri].cells[ci * 2]
+                    value_cell = table.rows[ri].cells[ci * 2 + 1]
+                    p_label = label_cell.paragraphs[0]
+                    r_label = p_label.add_run(label)
+                    r_label.font.size = Pt(8)
+                    r_label.font.color.rgb = SUBTITLE_COLOR
+                    r_label.bold = True
+                    p_value = value_cell.paragraphs[0]
+                    r_value = p_value.add_run(value)
+                    r_value.font.size = Pt(14)
+                    r_value.bold = True
+                    if color:
+                        r_value.font.color.rgb = color
+
+    from docx.oxml.ns import qn
+    from docx.oxml import OxmlElement
+    for ri in range(5):
+        for ci in range(4):
+            cell = table.rows[ri].cells[ci]
+            tc = cell._tc
+            tcPr = tc.get_or_add_tcPr()
+            shd = OxmlElement('w:shd')
+            shd.set(qn('w:fill'), 'F8FAFC' if ri % 2 == 0 else 'FFFFFF')
+            shd.set(qn('w:val'), 'clear')
+            tcPr.append(shd)
+
+
 def _generate_word_bytes(asesor_name: str, canal: str = "") -> bytes:
     result = current_data["result"]
     asesor_data = _get_asesor_data(asesor_name)
@@ -1358,77 +1484,90 @@ def _generate_word_bytes(asesor_name: str, canal: str = "") -> bytes:
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Calibri'
-    font.size = Pt(11)
+    font.size = Pt(10)
 
-    title = doc.add_heading('', level=0)
-    run = title.add_run(f'Informe de Ventas - {asesor_name}')
-    run.font.color.rgb = RGBColor(79, 70, 229)
-    run.font.size = Pt(22)
-
-    subtitle = doc.add_paragraph()
-    subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = subtitle.add_run(f'Canal: {canal_filter}  |  Generado con IA')
-    run.font.size = Pt(10)
-    run.font.color.rgb = RGBColor(100, 116, 139)
-
-    doc.add_paragraph()
-    doc.add_heading('Metricas del Asesor', level=1)
-    table = doc.add_table(rows=10, cols=2, style='Light Shading Accent 1')
-    table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    metrics_data = [
-        ('Cantidad Pedida', f"{asesor_data['cant_pedida']:,.0f}"),
-        ('Cantidad Pendiente', f"{asesor_data['cant_pendiente']:,.0f}"),
-        ('Cantidad Comprometida', f"{asesor_data['cant_comprometida']:,.0f}"),
-        ('Backlog', f"{asesor_data['backlog_pct']}%"),
-        ('Valor Total (V.UNIDAD)', f"${asesor_data.get('valor_total', 0):,.0f}"),
-        ('Utilidad Promedio', f"${asesor_data.get('utilidad_promedio', 0):,.0f}"),
-        ('Margen Promedio', f"{asesor_data.get('margen_promedio', 0):.0f}%"),
-        ('Descuentos Totales', f"${asesor_data.get('descuento_total', 0):,.0f}"),
-        ('Documentos Unicos', str(asesor_data['documentos_unicos'])),
-        ('Total Registros', str(asesor_data['total_registros'])),
-    ]
-    for i, (label, value) in enumerate(metrics_data):
-        row = table.rows[i]
-        row.cells[0].text = label
-        row.cells[1].text = value
-        for cell in row.cells:
-            for paragraph in cell.paragraphs:
-                for r in paragraph.runs:
-                    r.font.size = Pt(10)
+    _add_title_page(doc, asesor_name, canal_filter)
+    _add_kpi_summary(doc, asesor_data)
 
     if asesor_data.get('top_proyectos'):
-        doc.add_paragraph()
-        doc.add_heading('Proyectos', level=1)
+        doc.add_heading('Proyectos Principales', level=1)
         chart_buf = _chart_top_proyectos(asesor_data)
         if chart_buf:
             doc.add_picture(chart_buf, width=Inches(5.8))
             doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
             doc.add_paragraph()
 
+        docs_por_proy = asesor_data.get('documentos_por_proyecto', {})
+        for p in asesor_data['top_proyectos'][:5]:
+            doc.add_heading(p['proyecto'], level=2)
+            proj_table = doc.add_table(rows=2, cols=5, style='Table Grid')
+            proj_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            for idx, h in enumerate(['Pedida', 'Pendiente', 'Comprom.', 'Valor Pend.', 'V.Comprom.']):
+                proj_table.rows[0].cells[idx].text = h
+            _style_header_row(proj_table.rows[0], 5, font_size=8)
+            for idx, v in enumerate([f"{p['cant_pedida']:,.0f}", f"{p['cant_pendiente']:,.0f}",
+                                     f"{p['cant_comprometida']:,.0f}", f"${p['valor_pendiente']:,.0f}",
+                                     f"${p['v_comprometido']:,.0f}"]):
+                proj_table.rows[1].cells[idx].text = v
+            _style_alt_rows(proj_table, start_row=1, font_size=8)
+
+            docs = docs_por_proy.get(p['proyecto'], [])
+            for d in docs[:3]:
+                doc.add_heading(d['documento'], level=3)
+                if d.get('items'):
+                    items_table = doc.add_table(rows=min(len(d['items']), 5) + 1, cols=4, style='Table Grid')
+                    items_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                    for idx, h in enumerate(['Item', 'Pedida', 'Pendiente', 'Comprom.']):
+                        items_table.rows[0].cells[idx].text = h
+                    _style_header_row(items_table.rows[0], 4, font_size=8)
+                    for i, it in enumerate(d['items'][:5]):
+                        items_table.rows[i + 1].cells[0].text = it['item'][:50]
+                        items_table.rows[i + 1].cells[1].text = f"{it['cant_pedida']:,.0f}"
+                        items_table.rows[i + 1].cells[2].text = f"{it['cant_pendiente']:,.0f}"
+                        items_table.rows[i + 1].cells[3].text = f"{it['cant_comprometida']:,.0f}"
+                    _style_alt_rows(items_table, start_row=1, font_size=8)
+
+    if asesor_data.get('pedidos_por_estado'):
+        doc.add_heading('Distribucion por Estado', level=1)
+        estado_table = doc.add_table(rows=len(asesor_data['pedidos_por_estado']) + 1, cols=4, style='Table Grid')
+        estado_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Estado', 'Registros', 'Cant. Pedida', 'Cant. Pendiente']):
+            estado_table.rows[0].cells[idx].text = h
+        _style_header_row(estado_table.rows[0], 4, font_size=9)
+        for i, (estado, data) in enumerate(asesor_data['pedidos_por_estado'].items()):
+            row = estado_table.rows[i + 1]
+            row.cells[0].text = estado
+            row.cells[1].text = str(data['registros'])
+            row.cells[2].text = f"{data['cant_pedida']:,.0f}"
+            row.cells[3].text = f"{data['cant_pendiente']:,.0f}"
+        _style_alt_rows(estado_table, start_row=1, font_size=9)
+
+        chart_buf = _chart_estados_pedido(asesor_data)
+        if chart_buf:
+            doc.add_paragraph()
+            doc.add_picture(chart_buf, width=Inches(4.5))
+            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    if asesor_data.get('desglose_contrato'):
+        doc.add_heading('Tipo de Contrato', level=1)
+        cont_table = doc.add_table(rows=len(asesor_data['desglose_contrato']) + 1, cols=5, style='Table Grid')
+        cont_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        for idx, h in enumerate(['Tipo', 'Pedida', 'Pendiente', 'Comprometida', 'Registros']):
+            cont_table.rows[0].cells[idx].text = h
+        _style_header_row(cont_table.rows[0], 5, font_size=9)
+        for i, (tipo, d) in enumerate(asesor_data['desglose_contrato'].items()):
+            row = cont_table.rows[i + 1]
+            row.cells[0].text = tipo
+            row.cells[1].text = f"{d['pedida']:,.0f}"
+            row.cells[2].text = f"{d['pendiente']:,.0f}"
+            row.cells[3].text = f"{d['comprometida']:,.0f}"
+            row.cells[4].text = str(d['registros'])
+        _style_alt_rows(cont_table, start_row=1, font_size=9)
+
     if informe:
         doc.add_page_break()
-        doc.add_heading('Informe de IA', level=1)
-        lines = informe.split('\n')
-        idx = 0
-        while idx < len(lines):
-            stripped = lines[idx].strip()
-            if stripped.startswith('### '):
-                doc.add_heading(stripped[4:], level=2)
-            elif stripped.startswith('## '):
-                doc.add_heading(stripped[3:], level=1)
-            elif stripped.startswith('# '):
-                doc.add_heading(stripped[2:], level=0)
-            elif stripped.startswith('- '):
-                doc.add_paragraph(stripped[2:], style='List Bullet')
-            elif stripped:
-                p = doc.add_paragraph()
-                parts = stripped.split('**')
-                for j, part in enumerate(parts):
-                    r = p.add_run(part)
-                    r.font.size = Pt(11)
-                    if j % 2 == 1:
-                        r.bold = True
-            idx += 1
+        doc.add_heading('Analisis con Inteligencia Artificial', level=1)
+        _add_markdown_to_doc(doc, informe)
 
     buffer = io.BytesIO()
     doc.save(buffer)
