@@ -1255,7 +1255,7 @@ def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: b
         raise Exception("Variable REEND_API_KEY no configurada en el servidor.")
 
     payload = {
-        "from": "Analisis de Pedidos <onboarding@resend.dev>",
+        "from": "Analisis de Pedidos <practicante.comercial@interdoors.com.co>",
         "to": [to_email],
         "subject": subject,
         "text": body_text,
