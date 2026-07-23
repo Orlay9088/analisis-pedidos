@@ -1244,6 +1244,55 @@ def _find_advisor_email(asesor_name: str) -> str:
     return ""
 
 
+def _send_email_smtp(to_email: str, subject: str, body_text: str, attachment_bytes: bytes = None, attachment_name: str = None):
+    import smtplib
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from email.mime.base import MIMEBase
+    from email import encoders
+
+    host = os.getenv("SMTP_HOST", "")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASS", "")
+    from_addr = os.getenv("SMTP_FROM", user)
+
+    if not all([host, user, password]):
+        raise Exception("Variables SMTP_HOST, SMTP_USER, SMTP_PASS no configuradas.")
+
+    msg = MIMEMultipart()
+    msg["From"] = from_addr
+    msg["To"] = to_email
+    msg["Subject"] = subject
+    msg.attach(MIMEText(body_text, "plain", "utf-8"))
+
+    if attachment_bytes and attachment_name:
+        part = MIMEBase("application", "octet-stream")
+        part.set_payload(attachment_bytes)
+        encoders.encode_base64(part)
+        part.add_header("Content-Disposition", f'attachment; filename="{attachment_name}"')
+        msg.attach(part)
+
+    with smtplib.SMTP(host, port, timeout=30) as server:
+        server.starttls()
+        server.login(user, password)
+        server.sendmail(from_addr, [to_email], msg.as_string())
+
+
+def _test_smtp_connection():
+    import smtplib
+    host = os.getenv("SMTP_HOST", "")
+    port = int(os.getenv("SMTP_PORT", "587"))
+    user = os.getenv("SMTP_USER", "")
+    password = os.getenv("SMTP_PASS", "")
+    if not all([host, user, password]):
+        raise Exception("Variables SMTP no configuradas.")
+    with smtplib.SMTP(host, port, timeout=15) as server:
+        server.starttls()
+        server.login(user, password)
+    return user
+
+
 def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: bytes = None, attachment_name: str = None):
     import base64
     import urllib.request
@@ -1251,8 +1300,12 @@ def _send_email(to_email: str, subject: str, body_text: str, attachment_bytes: b
 
     resend_key = os.getenv("RESEND_API_KEY", "")
 
+    if not resend_key and os.getenv("SMTP_HOST"):
+        _send_email_smtp(to_email, subject, body_text, attachment_bytes, attachment_name)
+        return
+
     if not resend_key:
-        raise Exception("Variable REEND_API_KEY no configurada en el servidor.")
+        raise Exception("No hay RESEND_API_KEY ni SMTP configurado.")
 
     payload = {
         "from": "Analisis de Pedidos <practicante.comercial@interdoors.com.co>",
@@ -1407,10 +1460,21 @@ async def get_vendors():
 
 @app.post("/test-smtp")
 async def test_smtp():
+    import asyncio
     resend_key = os.getenv("RESEND_API_KEY", "")
-    if not resend_key:
-        return {"success": False, "error": "Variable RESEND_API_KEY no configurada."}
-    return {"success": True, "message": "Resend API configurada.", "key_prefix": resend_key[:8] + "..."}
+    smtp_host = os.getenv("SMTP_HOST", "")
+
+    if resend_key:
+        return {"success": True, "message": "Resend API configurada.", "user": resend_key[:8] + "..."}
+
+    if smtp_host:
+        try:
+            user = await asyncio.to_thread(_test_smtp_connection)
+            return {"success": True, "message": "SMTP conectado.", "user": user}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    return {"success": False, "error": "No hay RESEND_API_KEY ni SMTP configurado."}
 
 
 @app.post("/send-emails")
