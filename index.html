@@ -2584,7 +2584,7 @@
 
                 showToast(`Archivo descargado: ${filename}`, 'success');
             } catch (err) {
-                showToast('Error de conexion al descargar', 'error');
+                showToast(`Error al descargar: ${err.message || err}`, 'error');
                 console.error(err);
             }
         }
