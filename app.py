@@ -591,16 +591,45 @@ async def download_word(
     from docx.shared import Inches, Pt, Cm, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docxtpl import DocxTemplate
+    from datetime import datetime
 
-    doc = Document()
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'informe_template.docx')
 
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(10)
-
-    _add_title_page(doc, asesor_name, canal_filter)
-    _add_kpi_summary(doc, asesor_data)
+    if os.path.exists(template_path):
+        tpl = DocxTemplate(template_path)
+        context = {
+            'asesor_name': asesor_name,
+            'canal': canal_filter,
+            'fecha': datetime.now().strftime("%d/%m/%Y"),
+            'cant_pedida': f"{asesor_data['cant_pedida']:,.0f}",
+            'cant_pendiente': f"{asesor_data['cant_pendiente']:,.0f}",
+            'cant_comprometida': f"{asesor_data['cant_comprometida']:,.0f}",
+            'backlog': f"{asesor_data['backlog_pct']}%",
+            'valor_total': f"${asesor_data.get('valor_total', 0):,.0f}",
+            'utilidad_promedio': f"${asesor_data.get('utilidad_promedio', 0):,.0f}",
+            'margen_promedio': f"{asesor_data.get('margen_promedio', 0):.0f}%",
+            'descuentos': f"${asesor_data.get('descuento_total', 0):,.0f}",
+            'docs_unicos': str(asesor_data['documentos_unicos']),
+            'total_registros': str(asesor_data['total_registros']),
+            'chart_proyectos': '',
+            'chart_estados': '',
+            'chart_unidades': '',
+            'informe_content': '',
+        }
+        buf = io.BytesIO()
+        tpl.render(context)
+        tpl.save(buf)
+        buf.seek(0)
+        doc = Document(buf)
+    else:
+        doc = Document()
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(10)
+        _add_title_page(doc, asesor_name, canal_filter)
+        _add_kpi_summary(doc, asesor_data)
 
     if asesor_data.get('pedidos_por_estado'):
         doc.add_heading('Distribucion por Estado', level=1)
@@ -1479,15 +1508,45 @@ def _generate_word_bytes(asesor_name: str, canal: str = "") -> bytes:
     from docx.shared import Inches, Pt, RGBColor
     from docx.enum.text import WD_ALIGN_PARAGRAPH
     from docx.enum.table import WD_TABLE_ALIGNMENT
+    from docxtpl import DocxTemplate
+    from datetime import datetime
 
-    doc = Document()
-    style = doc.styles['Normal']
-    font = style.font
-    font.name = 'Calibri'
-    font.size = Pt(10)
+    template_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates', 'informe_template.docx')
 
-    _add_title_page(doc, asesor_name, canal_filter)
-    _add_kpi_summary(doc, asesor_data)
+    if os.path.exists(template_path):
+        tpl = DocxTemplate(template_path)
+        context = {
+            'asesor_name': asesor_name,
+            'canal': canal_filter,
+            'fecha': datetime.now().strftime("%d/%m/%Y"),
+            'cant_pedida': f"{asesor_data['cant_pedida']:,.0f}",
+            'cant_pendiente': f"{asesor_data['cant_pendiente']:,.0f}",
+            'cant_comprometida': f"{asesor_data['cant_comprometida']:,.0f}",
+            'backlog': f"{asesor_data['backlog_pct']}%",
+            'valor_total': f"${asesor_data.get('valor_total', 0):,.0f}",
+            'utilidad_promedio': f"${asesor_data.get('utilidad_promedio', 0):,.0f}",
+            'margen_promedio': f"{asesor_data.get('margen_promedio', 0):.0f}%",
+            'descuentos': f"${asesor_data.get('descuento_total', 0):,.0f}",
+            'docs_unicos': str(asesor_data['documentos_unicos']),
+            'total_registros': str(asesor_data['total_registros']),
+            'chart_proyectos': '',
+            'chart_estados': '',
+            'chart_unidades': '',
+            'informe_content': '',
+        }
+        buf = io.BytesIO()
+        tpl.render(context)
+        tpl.save(buf)
+        buf.seek(0)
+        doc = Document(buf)
+    else:
+        doc = Document()
+        style = doc.styles['Normal']
+        font = style.font
+        font.name = 'Calibri'
+        font.size = Pt(10)
+        _add_title_page(doc, asesor_name, canal_filter)
+        _add_kpi_summary(doc, asesor_data)
 
     if asesor_data.get('top_proyectos'):
         doc.add_heading('Proyectos Principales', level=1)
